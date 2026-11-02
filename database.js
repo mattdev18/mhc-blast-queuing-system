@@ -18,7 +18,35 @@ const dbConfig = isTursoCloud
   ? { url: tursoUrl, authToken: tursoToken }
   : { url: `file:${path.join(__dirname, "mhc_blast_local.db")}` };
 
-export const db = createClient(dbConfig);
+const rawClient = createClient(dbConfig);
+
+// Helper to ensure queries without explicit args do not crash Turso's hrana-client (which does Object.entries(stmt.args))
+function normalizeStmt(stmt) {
+  if (typeof stmt === "object" && stmt !== null) {
+    if (stmt.args === undefined || stmt.args === null) {
+      return { ...stmt, args: [] };
+    }
+  }
+  return stmt;
+}
+
+const originalExecute = rawClient.execute.bind(rawClient);
+rawClient.execute = function (stmtOrSql, args) {
+  if (typeof stmtOrSql === "object" && stmtOrSql !== null) {
+    return originalExecute(normalizeStmt(stmtOrSql), args);
+  }
+  return originalExecute(stmtOrSql, args || []);
+};
+
+if (typeof rawClient.batch === "function") {
+  const originalBatch = rawClient.batch.bind(rawClient);
+  rawClient.batch = function (stmts, mode) {
+    const safeStmts = Array.isArray(stmts) ? stmts.map(normalizeStmt) : stmts;
+    return originalBatch(safeStmts, mode);
+  };
+}
+
+export const db = rawClient;
 
 export const dbMode = isTursoCloud ? "Turso Cloud (LibSQL Edge)" : "Local SQLite (Offline File)";
 
