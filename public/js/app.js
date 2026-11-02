@@ -1313,6 +1313,53 @@ function exportActivityDurationReport() {
   downloadBlob(csvContent, `MHC_Activity_Duration_Report_${todayDateStr()}.csv`, "text/csv;charset=utf-8;");
 }
 
+function exportBlastInventoryCSV() {
+  if (inventoryList.length === 0) {
+    showToast("No inventory records to export.", "warning");
+    return;
+  }
+  const headers = ["Production Date", "Registered At", "Product", "Available Volume", "Unit", "Category"];
+  const rows = inventoryList.map((r) => [
+    r.production_date || r.date || "",
+    new Date(r.created_at).toLocaleString(),
+    r.product,
+    r.volume,
+    r.unit,
+    r.category || "",
+  ]);
+  const csvContent =
+    "\ufeff" +
+    [headers, ...rows]
+      .map((row) => row.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(","))
+      .join("\r\n");
+  downloadBlob(csvContent, `MHC_Blast_Inventory_${todayDateStr()}.csv`, "text/csv;charset=utf-8;");
+}
+
+function exportBlastHistoryCSV() {
+  if (historyList.length === 0) {
+    showToast("No history movement to export.", "warning");
+    return;
+  }
+  const headers = ["Date & Time", "Activity", "Product", "Volume Change", "Unit", "Remaining Stock", "Shift", "Queue", "Details"];
+  const rows = historyList.map((h) => [
+    new Date(h.timestamp).toLocaleString(),
+    h.type,
+    h.product,
+    (h.type === "DEDUCTION" ? "-" : "+") + Number(h.volume || 0),
+    h.unit,
+    h.remaining,
+    h.shift || "",
+    h.queue || "",
+    h.details || "",
+  ]);
+  const csvContent =
+    "\ufeff" +
+    [headers, ...rows]
+      .map((row) => row.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(","))
+      .join("\r\n");
+  downloadBlob(csvContent, `MHC_Inventory_History_${todayDateStr()}.csv`, "text/csv;charset=utf-8;");
+}
+
 function updateReportSummary() {
   const sumEl = document.getElementById("reportSummary");
   if (!sumEl) return;

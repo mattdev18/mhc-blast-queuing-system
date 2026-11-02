@@ -7,6 +7,11 @@ import { db, dbMode, initDatabase } from "./database.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Polyfill BigInt serialization for JSON responses (prevents "Do not know how to serialize a BigInt" error)
+BigInt.prototype.toJSON = function () {
+  return Number(this);
+};
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -149,7 +154,7 @@ app.post("/api/inventory", async (req, res) => {
       ],
     });
 
-    res.json({ success: true, id: insertResult.lastInsertRowid });
+    res.json({ success: true, id: Number(insertResult.lastInsertRowid) });
   } catch (err) {
     console.error("POST /api/inventory error:", err);
     res.status(500).json({ error: err.message });
