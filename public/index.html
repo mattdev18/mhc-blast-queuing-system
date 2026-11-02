@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>May Harvest Corporation - Product Queuing & Blast Freezing Management</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>❄️</text></svg>">
+</head>
+<body>
+
+  <!-- =========================================================================
+       HEADER
+  ========================================================================== -->
+  <header>
+    <div class="brand-area">
+      <div class="logo-container">
+        <img
+          src="data:image/png;base64,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"
+          alt="May Harvest Corporation Logo"
+          class="mhc-logo"
+        >
+      </div>
+      <div class="brand-text">
+        <h1>MAY HARVEST CORPORATION</h1>
+        <h2>PRODUCT QUEUING SYSTEM</h2>
+        <small>Product Queuing & Blast Freezing Cloud Management</small>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <div id="cloudStatusPill" class="cloud-pill">
+        <span class="cloud-dot"></span> Connecting...
+      </div>
+      <div id="clock">--:--:--</div>
+    </div>
+  </header>
+
+  <!-- =========================================================================
+       NAVIGATION TABS
+  ========================================================================== -->
+  <nav class="navbar">
+    <button class="nav-btn active" onclick="showScreen('blastInventory', this)">
+      📋 Blast Product Log & Inventory
+    </button>
+    <button class="nav-btn" onclick="showScreen('registration', this)">
+      📦 Product Queuing for Blast
+    </button>
+    <button class="nav-btn" onclick="showScreen('dashboard', this)">
+      ❄️ Blast Freezing Dashboard
+    </button>
+    <button class="nav-btn" onclick="showScreen('liveBoard', this)">
+      📺 Live TV Queue Board
+    </button>
+    <button class="nav-btn" onclick="showScreen('reports', this)">
+      📊 Reports / Cloud Backup
+    </button>
+  </nav>
+
+  <div class="container">
+
+    <!-- =======================================================================
+         TAB 1: BLAST PRODUCT LOG & INVENTORY
+    ======================================================================== -->
+    <section id="blastInventory" class="screen active">
+      <div class="page-header-card">
+        <h2>📋 Blast Product Log & Inventory</h2>
+        <p>Register products scheduled for blast freezing, track volumes in real-time, and monitor FIFO inventory deductions.</p>
+      </div>
+
+      <div class="card">
+        <h3>Register Product for Blast Freezing</h3>
+        <form id="blastInventoryForm" class="form-grid">
+          <div class="form-group">
+            <label for="blastLogDate">Date *</label>
+            <input id="blastLogDate" type="date" required>
+          </div>
+          <div class="form-group">
+            <label for="blastLogProductionDate">Production Date *</label>
+            <input id="blastLogProductionDate" type="date" required>
+          </div>
+          <div class="form-group">
+            <label for="blastLogProduct">Product Name *</label>
+            <input id="blastLogProduct" type="text" placeholder="e.g., HJAC, CCM, MDS" required>
+          </div>
+          <div class="form-group">
+            <label for="blastLogVolume">Volume *</label>
+            <input id="blastLogVolume" type="number" min="0.01" step="0.01" placeholder="e.g., 5000" required>
+          </div>
+          <div class="form-group">
+            <label for="blastLogUnit">Unit *</label>
+            <select id="blastLogUnit" required>
+              <option value="kg">kg</option>
+              <option value="MT">MT</option>
+              <option value="boxes">boxes</option>
+              <option value="cases">cases</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="blastLogCategory">Product Category *</label>
+            <select id="blastLogCategory" required>
+              <option value="Marinated">Marinated</option>
+              <option value="Timplados">Timplados</option>
+              <option value="Branded">Branded</option>
+              <option value="Deboned">Deboned</option>
+              <option value="Whole Chicken">Whole Chicken</option>
+              <option value="Giblets">Giblets</option>
+            </select>
+          </div>
+          <div class="form-group full">
+            <button class="btn-primary big-button" type="submit">
+              ➕ ADD TO BLAST INVENTORY (SAVE TO CLOUD)
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+          <h3 style="margin:0;">Registered Products & Inventory</h3>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button type="button" class="btn-outline" onclick="exportBlastInventoryCSV()">
+              📥 Export Inventory CSV
+            </button>
+            <button type="button" class="btn-danger" onclick="resetBlastInventory()">
+              ⚠️ Reset All Inventory
+            </button>
+          </div>
+        </div>
+
+        <div id="blastInventorySummary" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;"></div>
+
+        <!-- Inventory by Category Summary Board -->
+        <div class="card" style="margin-bottom:20px;background:#fff7ed;border:1px solid #fed7aa;box-shadow:none;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+            <h3 style="margin:0;color:#9a3412;">📦 Inventory Categorized by FIFO (Remaining Stock)</h3>
+            <span style="font-size:12px;color:#c2410c;font-weight:700;">Live Turso Cloud Sync</span>
+          </div>
+          <div id="blastCategoryInventoryBoard" style="display:grid;grid-template-columns:repeat(auto-fill, minmax(280px, 1fr));gap:12px;"></div>
+          <p id="blastCategoryInventoryEmpty" style="display:none;color:#9a3412;text-align:center;padding:14px;">No stock currently registered.</p>
+        </div>
+
+        <!-- Main Inventory Table -->
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Production Date</th>
+                <th>Registered At</th>
+                <th>Product</th>
+                <th>Available Volume</th>
+                <th>Category</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="blastInventoryRows"></tbody>
+          </table>
+        </div>
+        <p id="blastInventoryEmpty" style="display:none;color:#64748b;text-align:center;padding:24px;font-weight:600;">No products in inventory. Register products above.</p>
+      </div>
+
+      <!-- Movement History Table -->
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+          <h3 style="margin:0;">📜 Inventory Movement History</h3>
+          <button type="button" class="btn-outline" onclick="exportBlastHistoryCSV()">Export History CSV</button>
+        </div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Date & Time</th>
+                <th>Activity</th>
+                <th>Product</th>
+                <th>Volume Change</th>
+                <th>Remaining Stock</th>
+                <th>Shift / Queue</th>
+                <th>Details</th>
+              </tr>
+            </thead>
+            <tbody id="blastInventoryHistoryRows"></tbody>
+          </table>
+        </div>
+        <p id="blastInventoryHistoryEmpty" style="display:none;color:#64748b;text-align:center;padding:24px;font-weight:600;">No movement history recorded yet.</p>
+      </div>
+    </section>
+
+    <!-- =======================================================================
+         TAB 2: PRODUCT QUEUING FOR BLAST
+    ======================================================================== -->
+    <section id="registration" class="screen">
+      <div style="max-width:850px;margin:0 auto;">
+        <div class="page-header-card">
+          <h2>📦 Product Queuing for Blast</h2>
+          <p>Create batch queue entries. Products are automatically verified against available stock in Blast Inventory.</p>
+        </div>
+
+        <div class="card">
+          <form id="registrationForm">
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="queueDate">Date *</label>
+                <input id="queueDate" type="date" required>
+              </div>
+              <div class="form-group">
+                <label for="queueShift">Shift *</label>
+                <select id="queueShift" required>
+                  <option value="Day Shift">Day Shift</option>
+                  <option value="Mid Shift">Mid Shift</option>
+                  <option value="Night Shift">Night Shift</option>
+                </select>
+              </div>
+
+              <div class="form-group full">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                  <label style="margin:0;">Products to Load in this Queue *</label>
+                  <button type="button" class="btn-outline" style="font-size:12px;padding:4px 10px;" onclick="addProductEntryRow()">
+                    ➕ Add Another Product
+                  </button>
+                </div>
+                <p style="color:#64748b;font-size:13px;margin-bottom:12px;">All products submitted together share ONE queue number (e.g. Q001) and will move together.</p>
+                <div id="productEntries">
+                  <div class="product-entry" style="display:grid;grid-template-columns:2fr 1fr 1fr 1.2fr auto;gap:12px;align-items:end;margin-bottom:12px;padding:14px;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc;">
+                    <div class="form-group">
+                      <label>Product *</label>
+                      <input class="product-name" type="text" placeholder="e.g. HJAC, CCM, MDS" required autocomplete="off">
+                    </div>
+                    <div class="form-group">
+                      <label>Volume *</label>
+                      <input class="product-volume" type="text" placeholder="e.g. 5,000 kg" required autocomplete="off">
+                    </div>
+                    <div class="form-group">
+                      <label>Product Temp (°C) *</label>
+                      <input class="product-temperature" type="number" step="0.1" placeholder="4.0" required>
+                    </div>
+                    <div class="form-group">
+                      <label>Production Date *</label>
+                      <input class="product-production-date" type="date" required>
+                    </div>
+                    <button class="btn-outline remove-product-btn" type="button" onclick="this.closest('.product-entry').remove(); updateProductRemoveButtons();" style="height:42px;display:none;color:#dc2626;">
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="recorderChecker">Blast Receiver / Recorder *</label>
+                <input id="recorderChecker" type="text" placeholder="Name of receiver/recorder" required autocomplete="off">
+              </div>
+
+              <div class="form-group">
+                <label for="forLayer">Layer Status *</label>
+                <select id="forLayer" required>
+                  <option value="No">Not for Layer</option>
+                  <option value="Yes">For Layer</option>
+                </select>
+              </div>
+
+              <div class="form-group full">
+                <label for="priority">Prioritization *</label>
+                <select id="priority" required>
+                  <option value="FSI">FSI (Fast-moving / High Priority)</option>
+                  <option value="CCM">CCM</option>
+                  <option value="Branded">Branded</option>
+                  <option value="Unbranded">Unbranded</option>
+                  <option value="Aged">Aged</option>
+                  <option value="Repro">Repro</option>
+                </select>
+              </div>
+
+              <div class="form-group full">
+                <button class="btn-primary big-button" type="submit">
+                  🚀 GENERATE QUEUE NUMBER & DEDUCT INVENTORY
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+
+        <!-- Success Ticket Card -->
+        <div id="registrationSuccess" class="card" style="display:none;background:#ecfdf5;border:2px solid #22c55e;text-align:center;">
+          <h2 style="justify-content:center;color:#15803d;">✓ Product Queued Successfully</h2>
+          <div class="stat-number green" id="newQueueNumber" style="font-size:64px;margin:12px 0;">Q001</div>
+          <div class="ticket-info" id="newTicketInfo" style="line-height:1.8;margin-bottom:20px;font-size:14px;color:#1e293b;"></div>
+          <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+            <button class="btn-primary" onclick="printQueueTicket(window.lastRegisteredQueueId)">
+              🖨️ PRINT QUEUE TICKET
+            </button>
+            <button class="btn-outline" onclick="document.getElementById('registrationSuccess').style.display='none';">
+              REGISTER MORE PRODUCTS
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =======================================================================
+         TAB 3: BLAST FREEZING DASHBOARD
+    ======================================================================== -->
+    <section id="dashboard" class="screen">
+      <!-- KPI Stats -->
+      <div class="stats">
+        <div class="stat-card">
+          <h3>Waiting</h3>
+          <div class="stat-number blue" id="waitingCount">0</div>
+        </div>
+        <div class="stat-card">
+          <h3>In Blast Queue</h3>
+          <div class="stat-number orange" id="calledCount">0</div>
+        </div>
+        <div class="stat-card">
+          <h3>Loading / Freezing</h3>
+          <div class="stat-number orange" id="loadingCount">0</div>
+        </div>
+        <div class="stat-card">
+          <h3>Completed / Harvested</h3>
+          <div class="stat-number green" id="completedCount">0</div>
+        </div>
+        <div class="stat-card">
+          <h3>Total Today</h3>
+          <div class="stat-number gray" id="totalCount">0</div>
+        </div>
+      </div>
+
+      <!-- For Blast Inventory Card -->
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:12px;">
+          <div>
+            <h2 style="margin:0;">📦 For Blast Inventory (Batch Splitting & Allocation)</h2>
+            <p style="color:#64748b;font-size:13px;margin-top:2px;">
+              Registered queue batches waiting for allocation into Blast 1, 2, 3, or 4. One registration can be split across freezers.
+            </p>
+          </div>
+          <div id="forBlastSummary" style="display:flex;gap:10px;flex-wrap:wrap;"></div>
+        </div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Queue</th>
+                <th>Product</th>
+                <th>Production Date</th>
+                <th>Registered Volume</th>
+                <th>Already in Blast</th>
+                <th>Remaining For Blast</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="forBlastInventoryRows"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Main Dashboard Grid -->
+      <div class="dashboard-grid">
+        <!-- Left: Freezing Temperature Logger -->
+        <div>
+          <div class="card temp-panel">
+            <h2>🌡️ Product Temperature While Freezing</h2>
+            <div class="temp-field">
+              <label for="tempTruckSelect">Product Currently Freezing</label>
+              <select id="tempTruckSelect" onchange="renderTempPanel()"></select>
+            </div>
+            <div class="temp-field">
+              <label for="tempValue">Product Temp (°C)</label>
+              <input id="tempValue" type="number" step="0.1" placeholder="e.g. -18.5">
+            </div>
+            <div class="temp-field">
+              <label for="tempBy">Temperature Taken By</label>
+              <input id="tempBy" type="text" placeholder="Name of checker">
+            </div>
+            <div class="temp-field">
+              <label for="tempDecision">Decision</label>
+              <select id="tempDecision">
+                <option value="">Select decision</option>
+                <option value="For Extend">For Extend</option>
+                <option value="For Harvest">For Harvest</option>
+              </select>
+            </div>
+            <button type="button" class="btn-primary" style="width:100%;margin-top:4px;" onclick="saveFreezingTemperature()">
+              💾 Save Temperature Reading
+            </button>
+            <div style="margin-top:18px;font-weight:800;font-size:13px;color:#334155;">Recent Readings:</div>
+            <div id="tempHistory"></div>
+          </div>
+
+          <!-- Quick Search Card -->
+          <div class="card">
+            <h2>Queue Search</h2>
+            <input id="searchInput" type="text" placeholder="Search blast, queue number, or product..." oninput="renderQueue()">
+          </div>
+        </div>
+
+        <!-- Right: Today's Queue Table -->
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+            <h2 style="margin:0;">📋 Today's Queue Operations</h2>
+            <button class="btn-outline" onclick="fetchQueues()">🔄 Refresh Data</button>
+          </div>
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Queue</th>
+                  <th>Date</th>
+                  <th>Shift</th>
+                  <th>Product</th>
+                  <th>Volume</th>
+                  <th>Initial Temp</th>
+                  <th>Production Date</th>
+                  <th>Recorder</th>
+                  <th>For Layer</th>
+                  <th>Blast Freezer</th>
+                  <th>Freezing Start</th>
+                  <th>Freezing End</th>
+                  <th>Priority</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="queueTable"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =======================================================================
+         TAB 4: LIVE TV QUEUE BOARD (HIGH CONTRAST / MONITOR READY)
+      ======================================================================== -->
+    <section id="liveBoard" class="screen">
+      <div class="tv-board">
+        <div class="tv-board-head">
+          <h2>❄️ LIVE TV BLAST FREEZING QUEUE BOARD</h2>
+          <div class="tv-live">
+            <span class="cloud-dot"></span> LIVE QUEUE DISPLAY
+          </div>
+        </div>
+
+        <div class="tv-blasts" id="tvBlastCards"></div>
+
+        <div class="tv-layer-section">
+          <h3>📦 PRODUCTS IN LAYERING AREA</h3>
+          <div class="tv-layer-grid" id="tvLayerItems"></div>
+        </div>
+
+        <div class="tv-harvest-section">
+          <h3>🌾 PRODUCTS READY FOR HARVEST</h3>
+          <div class="tv-harvest-grid" id="tvHarvestItems"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =======================================================================
+         TAB 5: REPORTS & 1-MONTH CLOUD BACKUP
+    ======================================================================== -->
+    <section id="reports" class="screen">
+      <div class="card" style="max-width:850px;margin:0 auto;">
+        <h2>📊 Reports & Cloud Backup (1-Month Retention)</h2>
+        <p style="color:#64748b;margin-bottom:20px;">
+          Your data is persisted in Turso LibSQL cloud database with automated snapshots and recovery up to 30 days. You can also download local CSV and JSON archives anytime.
+        </p>
+
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:24px;">
+          <button class="btn-success" onclick="exportQueueCSV()">
+            📥 Export Today's Queue CSV
+          </button>
+          <button class="btn-secondary" onclick="exportActivityDurationReport()">
+            ⏱️ Export Activity Duration CSV
+          </button>
+          <a href="/api/backup" class="btn-primary" style="text-decoration:none;" download>
+            💾 Download Full System Backup (JSON)
+          </a>
+        </div>
+
+        <hr style="border:0;border-top:1px solid #e2e8f0;margin:24px 0;">
+
+        <h2>Today's Summary</h2>
+        <p id="reportSummary" style="line-height:1.9;color:#334155;background:#f8fafc;padding:16px;border-radius:10px;border:1px solid #e2e8f0;"></p>
+
+        <hr style="border:0;border-top:1px solid #e2e8f0;margin:24px 0;">
+
+        <h2>Daily Maintenance</h2>
+        <p style="color:#64748b;margin-bottom:14px;font-size:13px;">
+          Clear today's records and reset queue numbering to Q001 at the beginning of a fresh day shift.
+        </p>
+        <button class="btn-danger" onclick="resetDayQueue()">
+          ⚠️ Reset Today's Queue
+        </button>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- =========================================================================
+       ACTIVITY LOG MODAL (6-STAGE WORKFLOW)
+  ========================================================================== -->
+  <div id="blastActivityModal" class="modal-overlay">
+    <div class="modal-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <h2 style="margin:0;">Blast Freezing Activity Log</h2>
+        <button class="btn-danger" onclick="closeBlastActivityModal()">Close ✕</button>
+      </div>
+      <p id="modalQueueHeader" style="color:#64748b;font-weight:700;margin-bottom:16px;"></p>
+
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Activity</th>
+              <th>Start Date & Time</th>
+              <th>End Date & Time</th>
+              <th>Duration</th>
+              <th>Remarks</th>
+              <th>Manning</th>
+              <th>Recorder</th>
+              <th>Blast Supervisor</th>
+            </tr>
+          </thead>
+          <tbody id="blastActivityRows"></tbody>
+        </table>
+      </div>
+
+      <div style="display:flex;justify-content:flex-end;gap:12px;margin-top:20px;">
+        <button class="btn-primary" onclick="saveBlastActivityLog()">
+          💾 Save Activity Log
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       PRINT TICKET TEMPLATE
+  ========================================================================== -->
+  <div id="printTicket">
+    <div class="print-ticket-inner">
+      <h2>MAY HARVEST CORPORATION</h2>
+      <div style="font-size:12px;font-weight:bold;margin-bottom:6px;">PRODUCT QUEUING TICKET</div>
+      <div class="print-line"></div>
+      <div style="font-size:13px;font-weight:bold;">QUEUE NUMBER</div>
+      <div class="print-ticket-queue" id="printQueue">Q001</div>
+      <div class="print-line"></div>
+      <div class="print-detail" id="printDetails"></div>
+      <div class="print-line"></div>
+      <div style="font-size:12px;margin-top:8px;">Your product has been queued for blast freezing.</div>
+      <br>
+      <div style="font-size:12px;font-weight:bold;">THANK YOU!</div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toastContainer"></div>
+
+  <!-- Main JavaScript Application -->
+  <script src="js/app.js"></script>
+</body>
+</html>

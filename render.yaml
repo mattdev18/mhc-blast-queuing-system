@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: mhc-blast-queuing-system
+    runtime: node
+    plan: free
+    region: singapore # Closest to Philippines for lowest latency!
+    buildCommand: npm install
+    startCommand: node server.js
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: TURSO_DATABASE_URL
+        sync: false # Set securely in Render dashboard
+      - key: TURSO_AUTH_TOKEN
+        sync: false # Set securely in Render dashboard
