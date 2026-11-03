@@ -96,12 +96,71 @@ function calcTotalBlastDuration(truck) {
   return formatDurationMs(end - start);
 }
 
+function formatDateTimeLocal(d = new Date()) {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const min = String(d.getMinutes()).padStart(2, "0");
+  const sec = String(d.getSeconds()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}T${hh}:${min}:${sec}`;
+}
+
+function formatDownloadDateTime(dateVal) {
+  if (!dateVal) return "—";
+  const d = new Date(dateVal);
+  if (isNaN(d.getTime())) {
+    return String(dateVal);
+  }
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  let hours = d.getHours();
+  const ampm = hours >= 12 ? "PM" : "AM";
+  hours = hours % 12;
+  hours = hours ? hours : 12;
+  const mins = String(d.getMinutes()).padStart(2, "0");
+  const secs = String(d.getSeconds()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd} ${String(hours).padStart(2, "0")}:${mins}:${secs} ${ampm}`;
+}
+
+function calcFreezingDuration(startTs, endTs, status) {
+  if (!startTs) return "—";
+  const start = new Date(startTs);
+  if (isNaN(start.getTime())) return "—";
+
+  const end = endTs ? new Date(endTs) : new Date();
+  if (isNaN(end.getTime())) return "—";
+
+  const diffMs = end - start;
+  if (diffMs < 0) return "0m";
+
+  const totalMins = Math.floor(diffMs / 60000);
+  const hrs = Math.floor(totalMins / 60);
+  const mins = totalMins % 60;
+  const durStr = hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
+
+  if (endTs || status === "Completed" || status === "Harvested") {
+    return durStr;
+  }
+  return `${durStr} (Freezing in Progress)`;
+}
+
 function parseActivityDuration(start, end) {
-  if (!start || !end) return "—";
-  const ms = new Date(end) - new Date(start);
-  if (!Number.isFinite(ms) || ms < 0) return "—";
+  if (!start) return "—";
+  const startDate = new Date(start);
+  if (isNaN(startDate.getTime())) return "—";
+
+  const endDate = end ? new Date(end) : new Date();
+  if (isNaN(endDate.getTime())) return "—";
+
+  const ms = endDate - startDate;
+  if (!Number.isFinite(ms) || ms < 0) return "0m";
   const mins = Math.floor(ms / 60000);
-  return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+  const hrs = Math.floor(mins / 60);
+  const m = mins % 60;
+  const timeStr = hrs > 0 ? `${hrs}h ${m}m` : `${m}m`;
+  return end ? timeStr : `${timeStr} (Ongoing)`;
 }
 
 // =============================================================================
@@ -388,8 +447,6 @@ function addProductEntryRow() {
   if (!container) return;
   const div = document.createElement("div");
   div.className = "product-entry";
-  div.style.cssText =
-    "display:grid;grid-template-columns:2fr 1fr 1fr 1.2fr auto;gap:12px;align-items:end;margin-bottom:12px;padding:14px;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc;";
   div.innerHTML = `
     <div class="form-group">
       <label>Product *</label>
@@ -1091,14 +1148,16 @@ function renderBlastActivityControls(truck) {
 }
 
 async function stampActivity(truckId, activityIndex, side) {
+  const now = new Date();
+  const timestamp = formatDateTimeLocal(now);
   try {
     const res = await fetch(`/api/queues/${truckId}/stamp-activity`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ activityIndex, side }),
+      body: JSON.stringify({ activityIndex, side, timestamp }),
     });
     if (res.ok) {
-      showToast(`Activity ${side} timestamp recorded.`);
+      showToast(`Activity ${side} timestamp recorded at ${now.toLocaleTimeString()}.`);
       await fetchQueues();
     } else {
       const err = await res.json();
@@ -1204,15 +1263,17 @@ function printQueueTicket(id) {
 }
 
 // =============================================================================
-// REPORTS & CSV EXPORTS
+// REPORTS & CSV EXPORTS (REAL-TIME ACCURATE & TABLET COMPATIBLE)
 // =============================================================================
 function exportQueueCSV() {
   if (queueList.length === 0) {
     showToast("No queue data to export today.", "warning");
     return;
   }
+  const now = new Date();
+  const exportTimestampStr = formatDownloadDateTime(now);
   const headers = [
-    "Queue",
+    "Queue Number",
     "Registration Date",
     "Queue Date",
     "Shift",
@@ -1220,14 +1281,17 @@ function exportQueueCSV() {
     "Volume",
     "Product Temp (°C)",
     "Production Date",
-    "Recorder",
-    "Blast Freezer",
+    "Receiver / Recorder",
+    "For Layer",
+    "Blast Freezer Assigned",
     "Priority",
-    "Arrival",
-    "Status",
-    "Blast Start Time",
-    "Blast End Time",
+    "Current Status",
+    "Arrival Time",
+    "Blast Freezing Start",
+    "Blast Freezing End",
+    "Real-Time Freezing Duration",
     "Harvest Time",
+    "Export Timestamp",
   ];
 
   const rows = queueList.map((t) => [
@@ -1240,13 +1304,16 @@ function exportQueueCSV() {
     t.product_temperature,
     t.production_date,
     t.recorder_checker,
-    t.assigned_blast || "",
+    t.isForLayer ? "Yes" : "No",
+    t.assigned_blast || "Not Assigned",
     t.priority,
-    t.arrival,
     t.status,
-    t.loading_time || "",
-    t.completed_time || "",
-    t.departed_time || "",
+    formatDownloadDateTime(t.arrival_timestamp || t.arrival),
+    formatDownloadDateTime(t.blast_start_timestamp || t.loading_time),
+    formatDownloadDateTime(t.blast_end_timestamp || t.completed_time),
+    calcFreezingDuration(t.blast_start_timestamp, t.blast_end_timestamp, t.status),
+    formatDownloadDateTime(t.harvest_start_timestamp || t.departed_time),
+    exportTimestampStr,
   ]);
 
   const csvContent =
@@ -1255,7 +1322,11 @@ function exportQueueCSV() {
       .map((row) => row.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(","))
       .join("\r\n");
 
-  downloadBlob(csvContent, `MHC_Product_Queue_${todayDateStr()}.csv`, "text/csv;charset=utf-8;");
+  downloadBlob(
+    csvContent,
+    `MHC_Product_Queue_${todayDateStr()}_${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}.csv`,
+    "text/csv;charset=utf-8;"
+  );
 }
 
 function exportActivityDurationReport() {
@@ -1263,22 +1334,25 @@ function exportActivityDurationReport() {
     showToast("No records to export.", "warning");
     return;
   }
+  const now = new Date();
+  const exportTimestampStr = formatDownloadDateTime(now);
   const headers = [
-    "Queue",
+    "Queue Number",
     "Product",
     "Volume",
     "Blast Freezer",
     "Date",
     "Shift",
-    "Activity",
+    "Activity Stage",
     "Start Date & Time",
     "End Date & Time",
-    "Duration",
-    "Status",
+    "Real-Time Duration",
+    "Activity Status",
     "Manning",
     "Recorder",
     "Supervisor",
     "Remarks",
+    "Export Timestamp",
   ];
 
   const rows = [];
@@ -1288,18 +1362,19 @@ function exportActivityDurationReport() {
         truck.queue,
         truck.product,
         truck.volume,
-        truck.assigned_blast || "",
+        truck.assigned_blast || "Not Assigned",
         truck.queue_date || truck.date,
         truck.queue_shift,
         a.name,
-        a.start || "",
-        a.end || "",
+        formatDownloadDateTime(a.start),
+        formatDownloadDateTime(a.end),
         parseActivityDuration(a.start, a.end),
-        a.end ? "Ended" : a.start ? "In Progress" : "Not Started",
+        a.end ? "Completed" : a.start ? "In Progress" : "Not Started",
         a.manning || "",
         a.recorder || "",
         a.blastSupervisor || "",
         a.remarks || "",
+        exportTimestampStr,
       ]);
     });
   });
@@ -1310,7 +1385,11 @@ function exportActivityDurationReport() {
       .map((row) => row.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(","))
       .join("\r\n");
 
-  downloadBlob(csvContent, `MHC_Activity_Duration_Report_${todayDateStr()}.csv`, "text/csv;charset=utf-8;");
+  downloadBlob(
+    csvContent,
+    `MHC_Activity_Duration_Report_${todayDateStr()}_${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}.csv`,
+    "text/csv;charset=utf-8;"
+  );
 }
 
 function exportBlastInventoryCSV() {
@@ -1318,21 +1397,38 @@ function exportBlastInventoryCSV() {
     showToast("No inventory records to export.", "warning");
     return;
   }
-  const headers = ["Production Date", "Registered At", "Product", "Available Volume", "Unit", "Category"];
+  const now = new Date();
+  const exportTimestampStr = formatDownloadDateTime(now);
+  const headers = [
+    "Production Date",
+    "Registered Date & Time",
+    "Product Name",
+    "Available Volume",
+    "Unit",
+    "Category",
+    "Notes",
+    "Export Timestamp",
+  ];
   const rows = inventoryList.map((r) => [
     r.production_date || r.date || "",
-    new Date(r.created_at).toLocaleString(),
+    formatDownloadDateTime(r.created_at),
     r.product,
     r.volume,
     r.unit,
     r.category || "",
+    r.notes || "",
+    exportTimestampStr,
   ]);
   const csvContent =
     "\ufeff" +
     [headers, ...rows]
       .map((row) => row.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(","))
       .join("\r\n");
-  downloadBlob(csvContent, `MHC_Blast_Inventory_${todayDateStr()}.csv`, "text/csv;charset=utf-8;");
+  downloadBlob(
+    csvContent,
+    `MHC_Blast_Inventory_${todayDateStr()}_${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}.csv`,
+    "text/csv;charset=utf-8;"
+  );
 }
 
 function exportBlastHistoryCSV() {
@@ -1340,9 +1436,22 @@ function exportBlastHistoryCSV() {
     showToast("No history movement to export.", "warning");
     return;
   }
-  const headers = ["Date & Time", "Activity", "Product", "Volume Change", "Unit", "Remaining Stock", "Shift", "Queue", "Details"];
+  const now = new Date();
+  const exportTimestampStr = formatDownloadDateTime(now);
+  const headers = [
+    "Movement Date & Time",
+    "Activity Type",
+    "Product Name",
+    "Volume Change",
+    "Unit",
+    "Remaining Stock",
+    "Shift",
+    "Queue Number",
+    "Details",
+    "Export Timestamp",
+  ];
   const rows = historyList.map((h) => [
-    new Date(h.timestamp).toLocaleString(),
+    formatDownloadDateTime(h.timestamp),
     h.type,
     h.product,
     (h.type === "DEDUCTION" ? "-" : "+") + Number(h.volume || 0),
@@ -1351,13 +1460,18 @@ function exportBlastHistoryCSV() {
     h.shift || "",
     h.queue || "",
     h.details || "",
+    exportTimestampStr,
   ]);
   const csvContent =
     "\ufeff" +
     [headers, ...rows]
       .map((row) => row.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(","))
       .join("\r\n");
-  downloadBlob(csvContent, `MHC_Inventory_History_${todayDateStr()}.csv`, "text/csv;charset=utf-8;");
+  downloadBlob(
+    csvContent,
+    `MHC_Inventory_History_${todayDateStr()}_${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}.csv`,
+    "text/csv;charset=utf-8;"
+  );
 }
 
 function updateReportSummary() {
@@ -1397,20 +1511,42 @@ function downloadBlob(content, filename, type) {
   const a = document.createElement("a");
   a.href = url;
   a.download = filename;
+  a.target = "_blank";
   document.body.appendChild(a);
   a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  setTimeout(() => {
+    URL.revokeObjectURL(url);
+    if (a.parentNode) {
+      a.parentNode.removeChild(a);
+    }
+  }, 400);
 }
 
 // =============================================================================
 // INITIALIZATION & EVENT LISTENERS
 // =============================================================================
 document.addEventListener("DOMContentLoaded", () => {
-  // Real-time Clock
-  setInterval(() => {
+  // Real-time Clock synchronized in real time
+  function updateLiveClock() {
     const clockEl = document.getElementById("clock");
-    if (clockEl) clockEl.textContent = new Date().toLocaleString();
+    if (!clockEl) return;
+    const now = new Date();
+    const opts = {
+      weekday: "short",
+      year: "numeric",
+      month: "numeric",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: true,
+    };
+    clockEl.textContent = `🕒 ${now.toLocaleString("en-US", opts)}`;
+  }
+  updateLiveClock();
+
+  setInterval(() => {
+    updateLiveClock();
 
     // Ticking durations in live TV board
     if (currentScreen === "liveBoard") {
@@ -1505,6 +1641,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       try {
+        const now = new Date();
         const res = await fetch("/api/queues", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1515,6 +1652,8 @@ document.addEventListener("DOMContentLoaded", () => {
             priority,
             isForLayer,
             products,
+            arrivalTime: now.toLocaleTimeString("en-US", { hour12: true }),
+            arrivalTimestamp: now.toISOString(),
           }),
         });
 
@@ -1541,7 +1680,7 @@ document.addEventListener("DOMContentLoaded", () => {
           regForm.reset();
           document.getElementById("queueDate").value = todayDateStr();
           document.getElementById("productEntries").innerHTML = `
-            <div class="product-entry" style="display:grid;grid-template-columns:2fr 1fr 1fr 1.2fr auto;gap:12px;align-items:end;margin-bottom:12px;padding:14px;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc;">
+            <div class="product-entry">
               <div class="form-group"><label>Product *</label><input class="product-name" type="text" placeholder="e.g. HJAC, CCM, MDS" required autocomplete="off"></div>
               <div class="form-group"><label>Volume *</label><input class="product-volume" type="text" placeholder="e.g. 5,000 kg" required autocomplete="off"></div>
               <div class="form-group"><label>Product Temp (°C) *</label><input class="product-temperature" type="number" step="0.1" placeholder="4.0" required></div>

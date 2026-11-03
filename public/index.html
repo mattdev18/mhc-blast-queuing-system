@@ -2,10 +2,10 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
   <title>May Harvest Corporation - Product Queuing & Blast Freezing Management</title>
   <link rel="stylesheet" href="css/style.css">
-  <link rel="icon" href="/mhc-logo.png" type="image/png"><text y=%22.9em%22 font-size=%2290%22>❄️</text></svg>">
+  <link rel="icon" href="/mhc-logo.png" type="image/png">
 </head>
 <body>
 
@@ -220,7 +220,7 @@
                 </div>
                 <p style="color:#64748b;font-size:13px;margin-bottom:12px;">All products submitted together share ONE queue number (e.g. Q001) and will move together.</p>
                 <div id="productEntries">
-                  <div class="product-entry" style="display:grid;grid-template-columns:2fr 1fr 1fr 1.2fr auto;gap:12px;align-items:end;margin-bottom:12px;padding:14px;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc;">
+                  <div class="product-entry">
                     <div class="form-group">
                       <label>Product *</label>
                       <input class="product-name" type="text" placeholder="e.g. HJAC, CCM, MDS" required autocomplete="off">
@@ -334,6 +334,7 @@
           </div>
           <div id="forBlastSummary" style="display:flex;gap:10px;flex-wrap:wrap;"></div>
         </div>
+        <div class="table-scroll-hint"><span>👉 Swipe horizontally to view full table columns</span></div>
         <div class="table-container">
           <table>
             <thead>
@@ -398,6 +399,7 @@
             <h2 style="margin:0;">📋 Today's Queue Operations</h2>
             <button class="btn-outline" onclick="fetchQueues()">🔄 Refresh Data</button>
           </div>
+          <div class="table-scroll-hint"><span>👉 Swipe horizontally to view all 15 columns & actions</span></div>
           <div class="table-container">
             <table>
               <thead>

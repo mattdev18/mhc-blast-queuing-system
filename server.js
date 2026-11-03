@@ -23,18 +23,39 @@ app.use(express.urlencoded({ extended: true, limit: "15mb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
 // =============================================================================
-// HELPER FUNCTIONS
+// HELPER FUNCTIONS (TIMEZONE ACCURATE TO ASIA/MANILA UTC+8)
 // =============================================================================
 
 function todayString() {
-  const now = new Date();
-  return (
-    now.getFullYear() +
-    "-" +
-    String(now.getMonth() + 1).padStart(2, "0") +
-    "-" +
-    String(now.getDate()).padStart(2, "0")
-  );
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const p = {};
+  parts.forEach((x) => (p[x.type] = x.value));
+  return `${p.year}-${p.month}-${p.day}`;
+}
+
+function manilaTimeString(d = new Date()) {
+  return d.toLocaleTimeString("en-US", { timeZone: "Asia/Manila", hour12: true });
+}
+
+function manilaIsoString(d = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(d);
+  const p = {};
+  parts.forEach((x) => (p[x.type] = x.value));
+  return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:${p.second}`;
 }
 
 function normDate(v) {
@@ -375,9 +396,9 @@ app.post("/api/queues", async (req, res) => {
         recorderChecker || "",
         priority || "FSI",
         isForLayer ? 1 : 0,
-        now.toLocaleTimeString(),
-        now.toISOString(),
-        now.toISOString(),
+        req.body.arrivalTime || manilaTimeString(now),
+        req.body.arrivalTimestamp || now.toISOString(),
+        req.body.arrivalTimestamp || now.toISOString(),
         JSON.stringify(products),
         JSON.stringify(defaultActivities),
         now.toISOString(),
@@ -435,23 +456,23 @@ app.patch("/api/queues/:id/status", async (req, res) => {
     const current = findRes.rows[0];
     let activities = current.blast_activities_json ? JSON.parse(current.blast_activities_json) : [];
 
-    // Auto-fill activities when stage changes
+    // Auto-fill activities when stage changes using Manila local time
     const now = new Date();
-    const localNow = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    const localNow = manilaIsoString(now);
 
-    if (status === "Loading" && blastStartTimestamp) {
+    if (status === "Loading") {
       const act = activities.find((a) => a.name === "Blast Freezing") || activities[3];
-      if (act && !act.start) act.start = localNow;
+      if (act && !act.start) act.start = req.body.blastStartTimestamp ? manilaIsoString(new Date(req.body.blastStartTimestamp)) : localNow;
     }
 
-    if (status === "Completed" && blastEndTimestamp) {
+    if (status === "Completed") {
       const act = activities.find((a) => a.name === "Blast Freezing") || activities[3];
-      if (act) act.end = localNow;
+      if (act) act.end = req.body.blastEndTimestamp ? manilaIsoString(new Date(req.body.blastEndTimestamp)) : localNow;
     }
 
     if (status === "Harvested") {
       const act = activities.find((a) => a.name === "Harvesting") || activities[4];
-      if (act && !act.start) act.start = localNow;
+      if (act && !act.start) act.start = req.body.harvestStartTimestamp ? manilaIsoString(new Date(req.body.harvestStartTimestamp)) : localNow;
     }
 
     await db.execute({
@@ -711,7 +732,7 @@ app.post("/api/queues/:id/stamp-activity", async (req, res) => {
     }
 
     const now = new Date();
-    const localNow = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    const localNow = req.body.timestamp || manilaIsoString(now);
 
     if (side === "start") {
       if (a.start) return res.status(400).json({ error: "Activity has already started." });
@@ -730,7 +751,7 @@ app.post("/api/queues/:id/stamp-activity", async (req, res) => {
     const extraArgs = [];
     if (activityIndex === 4 && side === "end") {
       extraSql = ", harvest_end_timestamp = ?, harvest_end_time = ?";
-      extraArgs.push(now.toISOString(), now.toLocaleTimeString());
+      extraArgs.push(now.toISOString(), req.body.harvestEndTime || manilaTimeString(now));
     }
 
     await db.execute({
