@@ -475,6 +475,89 @@ app.patch("/api/queues/:id/status", async (req, res) => {
       if (act && !act.start) act.start = req.body.harvestStartTimestamp ? manilaIsoString(new Date(req.body.harvestStartTimestamp)) : localNow;
     }
 
+    // When a queue is cancelled, return any unallocated product volume back to blast_inventory
+    if (status === "Cancelled" && current.status !== "Cancelled") {
+      try {
+        const products = current.products_json ? JSON.parse(current.products_json) : [];
+        for (const p of products) {
+          const totalAmount = parseFloat(p.amount) || parseFloat(String(p.volume || "").replace(/[^0-9.]/g, "")) || 0;
+          const allocatedAmount = parseFloat(p.allocated) || 0;
+          const returnVol = current.parent_id
+            ? totalAmount
+            : Math.round((Math.max(0, totalAmount - allocatedAmount) + Number.EPSILON) * 100) / 100;
+
+          if (returnVol > 0) {
+            const pName = (p.product || "").trim();
+            const pDate = p.productionDate || current.production_date || "";
+
+            const allInv = await db.execute({
+              sql: "SELECT * FROM blast_inventory ORDER BY id DESC",
+            });
+
+            const matchingRow = allInv.rows.find(
+              (r) =>
+                normProductName(r.product) === normProductName(pName) &&
+                normDate(r.production_date) === normDate(pDate)
+            );
+
+            if (matchingRow) {
+              const updatedVol = Math.round((parseFloat(matchingRow.volume) + returnVol + Number.EPSILON) * 100) / 100;
+              await db.execute({
+                sql: "UPDATE blast_inventory SET volume = ? WHERE id = ?",
+                args: [updatedVol, matchingRow.id],
+              });
+            } else {
+              const anyMatch = allInv.rows.find(
+                (r) => normProductName(r.product) === normProductName(pName)
+              );
+              const unit = p.unit || anyMatch?.unit || "kg";
+              const category = anyMatch?.category || "Returned Stock";
+
+              await db.execute({
+                sql: `INSERT INTO blast_inventory (date, production_date, product, volume, unit, category, notes, created_at)
+                      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                args: [
+                  todayString(),
+                  normDate(pDate) || todayString(),
+                  pName,
+                  returnVol,
+                  unit,
+                  category,
+                  `Restored from cancelled queue ${current.queue}`,
+                  now.toISOString(),
+                ],
+              });
+            }
+
+            const afterSum = await db.execute({
+              sql: "SELECT SUM(volume) as total FROM blast_inventory WHERE LOWER(TRIM(product)) = LOWER(TRIM(?))",
+              args: [pName],
+            });
+            const remainingTotal = Math.round(((afterSum.rows[0]?.total || returnVol) + Number.EPSILON) * 100) / 100;
+            const unit = p.unit || "kg";
+
+            await db.execute({
+              sql: `INSERT INTO blast_inventory_history (
+                date_time, activity, product, volume_change, remaining_stock, shift_queue, details, created_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+              args: [
+                manilaIsoString(now),
+                "RETURN",
+                pName,
+                `+${returnVol} ${unit}`,
+                `${remainingTotal} ${unit}`,
+                `${current.queue} (Cancelled)`,
+                `Returned unallocated volume from cancelled queue ${current.queue}`,
+                now.toISOString(),
+              ],
+            });
+          }
+        }
+      } catch (invErr) {
+        console.error("Failed to restore inventory on cancel:", invErr);
+      }
+    }
+
     await db.execute({
       sql: `UPDATE blast_queues SET
         status = COALESCE(?, status),
@@ -503,7 +586,7 @@ app.patch("/api/queues/:id/status", async (req, res) => {
         harvestStartTimestamp ?? null,
         harvestEndTime ?? null,
         harvestEndTimestamp ?? null,
-        cancelledTime ?? null,
+        cancelledTime ?? (status === "Cancelled" ? manilaTimeString(now) : null),
         JSON.stringify(activities),
         id,
       ],

@@ -208,12 +208,30 @@ async function fetchHistory() {
   }
 }
 
+let lastQueueJson = "";
+
 async function fetchQueues() {
   try {
     const res = await fetch("/api/queues");
     if (res.ok) {
-      queueList = await res.json();
-      renderQueue();
+      const newData = await res.json();
+      const newJson = JSON.stringify(newData);
+      const isDataChanged = newJson !== lastQueueJson;
+      queueList = newData;
+      lastQueueJson = newJson;
+
+      const activeEl = document.activeElement;
+      const isUserEditingAlloc =
+        activeEl &&
+        (activeEl.id?.startsWith("alloc_") ||
+          activeEl.id?.startsWith("blastSel_") ||
+          activeEl.id === "searchInput");
+
+      // Don't reconstruct the table DOM if data hasn't changed and user is typing or picking in alloc inputs
+      if (isDataChanged || !isUserEditingAlloc) {
+        renderQueue();
+      }
+
       updateStats();
       renderTempPanel();
       if (currentScreen === "liveBoard") {
@@ -532,7 +550,41 @@ function checkProductProductionDate(row) {
 // =============================================================================
 // QUEUE DASHBOARD & ACTIONS
 // =============================================================================
+// State persistence for Blast assignment dropdowns & volume inputs to prevent background polling reset
+const allocDraftState = {}; // { [truckId]: { blast: string, volumes: { [origIdx]: number|string } } }
+
+function updateAllocBlast(truckId, value) {
+  if (!allocDraftState[truckId]) allocDraftState[truckId] = {};
+  allocDraftState[truckId].blast = value;
+}
+
+function updateAllocVol(truckId, origIdx, value) {
+  if (!allocDraftState[truckId]) allocDraftState[truckId] = {};
+  if (!allocDraftState[truckId].volumes) allocDraftState[truckId].volumes = {};
+  allocDraftState[truckId].volumes[origIdx] = value;
+}
+
+function saveAllActiveAllocInputs() {
+  document.querySelectorAll("[id^='blastSel_']").forEach((sel) => {
+    const truckId = sel.id.replace("blastSel_", "");
+    if (!allocDraftState[truckId]) allocDraftState[truckId] = {};
+    allocDraftState[truckId].blast = sel.value;
+  });
+  document.querySelectorAll("[id^='alloc_']").forEach((inp) => {
+    const lastUnderscore = inp.id.lastIndexOf("_");
+    if (lastUnderscore !== -1) {
+      const origIdx = parseInt(inp.id.substring(lastUnderscore + 1), 10);
+      const truckId = inp.id.substring("alloc_".length, lastUnderscore);
+      if (!allocDraftState[truckId]) allocDraftState[truckId] = {};
+      if (!allocDraftState[truckId].volumes) allocDraftState[truckId].volumes = {};
+      allocDraftState[truckId].volumes[origIdx] = inp.value;
+    }
+  });
+}
+
 function renderQueue() {
+  saveAllActiveAllocInputs();
+
   const table = document.getElementById("queueTable");
   const searchInput = document.getElementById("searchInput");
   const search = searchInput ? searchInput.value.toLowerCase().trim() : "";
@@ -640,31 +692,42 @@ function volumeCellHTML(truck) {
 
 function renderAllocPanel(truck) {
   const prods = truck.products || [];
-  const open = prods.filter((p) => (p.amount || 0) > (p.allocated || 0));
-  if (open.length === 0) return "";
+  const openWithIndices = prods
+    .map((p, origIdx) => ({ p, origIdx }))
+    .filter(({ p }) => (p.amount || 0) > (p.allocated || 0));
+
+  if (openWithIndices.length === 0) return "";
+
+  const draft = allocDraftState[truck.id] || {};
+  const currentBlast = draft.blast || "Blast 1";
 
   return `
     <div style="padding:8px 10px;border:1px dashed #cbd5e1;border-radius:8px;background:#f8fafc;margin:4px 0;width:100%;min-width:260px;">
       <div style="font-size:11px;font-weight:800;color:#334155;margin-bottom:6px;">SPLIT / PUT IN BLAST</div>
-      ${open
-        .map(
-          (p, i) => `
-        <div style="margin-bottom:6px;">
-          <div style="font-size:11px;font-weight:700;">${escapeHTML(p.product)} <small style="color:#64748b;">(Left: ${p.amount - (p.allocated || 0)} ${p.unit})</small></div>
-          <div style="display:flex;gap:4px;align-items:center;">
-            <input type="number" id="alloc_${truck.id}_${i}" min="0" max="${p.amount - (p.allocated || 0)}" step="any" value="${p.amount - (p.allocated || 0)}" style="width:110px;padding:4px 8px;font-size:12px;">
-            <span style="font-size:11px;font-weight:700;">${escapeHTML(p.unit)}</span>
-          </div>
-        </div>
-      `
-        )
+      ${openWithIndices
+        .map(({ p, origIdx }) => {
+          const remaining = Math.max(0, (p.amount || 0) - (p.allocated || 0));
+          const hasDraftVal = draft.volumes && draft.volumes[origIdx] !== undefined && draft.volumes[origIdx] !== "";
+          const displayVal = hasDraftVal ? draft.volumes[origIdx] : remaining;
+          return `
+            <div style="margin-bottom:6px;">
+              <div style="font-size:11px;font-weight:700;">${escapeHTML(p.product)} <small style="color:#64748b;">(Left: ${remaining} ${p.unit})</small></div>
+              <div style="display:flex;gap:4px;align-items:center;">
+                <input type="number" id="alloc_${truck.id}_${origIdx}" min="0.01" max="${remaining}" step="any"
+                  value="${displayVal}"
+                  oninput="updateAllocVol('${truck.id}', ${origIdx}, this.value)"
+                  style="width:110px;padding:4px 8px;font-size:12px;">
+                <span style="font-size:11px;font-weight:700;">${escapeHTML(p.unit)}</span>
+              </div>
+            </div>
+          `;
+        })
         .join("")}
       <div style="display:flex;gap:6px;align-items:center;margin-top:6px;">
-        <select id="blastSel_${truck.id}" style="padding:4px 8px;font-size:12px;max-width:110px;">
-          <option value="Blast 1">Blast 1</option>
-          <option value="Blast 2">Blast 2</option>
-          <option value="Blast 3">Blast 3</option>
-          <option value="Blast 4">Blast 4</option>
+        <select id="blastSel_${truck.id}" onchange="updateAllocBlast('${truck.id}', this.value)" style="padding:4px 8px;font-size:12px;max-width:110px;">
+          ${["Blast 1", "Blast 2", "Blast 3", "Blast 4"]
+            .map((b) => `<option value="${b}" ${b === currentBlast ? "selected" : ""}>${b}</option>`)
+            .join("")}
         </select>
         <button type="button" class="btn-primary" style="padding:5px 10px;font-size:11px;" onclick="allocateQueueBatch('${truck.id}')">
           Assign
@@ -677,18 +740,29 @@ function renderAllocPanel(truck) {
 async function allocateQueueBatch(id) {
   const truck = queueList.find((t) => t.id === id);
   if (!truck) return;
+  saveAllActiveAllocInputs();
+
+  const draft = allocDraftState[id] || {};
   const sel = document.getElementById(`blastSel_${id}`);
-  const blast = sel ? sel.value : "Blast 1";
+  const blast = (sel ? sel.value : draft.blast) || "Blast 1";
   const prods = truck.products || [];
 
   const picks = [];
   for (let i = 0; i < prods.length; i++) {
     const input = document.getElementById(`alloc_${id}_${i}`);
-    if (input) {
-      const vol = parseFloat(input.value) || 0;
-      if (vol > 0) {
-        picks.push({ index: i, volume: vol });
+    const remaining = Math.max(0, (prods[i].amount || 0) - (prods[i].allocated || 0));
+    let vol = 0;
+    if (input && input.value !== "") {
+      vol = parseFloat(input.value) || 0;
+    } else if (draft.volumes && draft.volumes[i] !== undefined && draft.volumes[i] !== "") {
+      vol = parseFloat(draft.volumes[i]) || 0;
+    }
+    if (vol > 0) {
+      if (vol > remaining + 0.001) {
+        showToast(`Volume for ${prods[i].product} cannot exceed remaining ${remaining} ${prods[i].unit}`, "warning");
+        return;
       }
+      picks.push({ index: i, volume: vol });
     }
   }
 
@@ -706,6 +780,7 @@ async function allocateQueueBatch(id) {
 
     if (res.ok) {
       const data = await res.json();
+      delete allocDraftState[id]; // Clear draft state on success
       showToast(`Batch assigned to ${blast}: ${data.childQueue}`);
       await fetchQueues();
     } else {
@@ -851,8 +926,11 @@ async function cancelTruck(id, queueNum) {
       }),
     });
     if (res.ok) {
-      showToast(`Queue ${queueNum} cancelled.`);
+      delete allocDraftState[id];
+      showToast(`Queue ${queueNum} cancelled. Stock returned to inventory.`);
       await fetchQueues();
+      await fetchInventory();
+      await fetchHistory();
     }
   } catch (e) {
     showToast("Error cancelling queue", "error");
