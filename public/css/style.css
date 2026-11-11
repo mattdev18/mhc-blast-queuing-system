@@ -236,10 +236,10 @@ header {
    MAIN CONTAINER & SECTIONS
    ============================================================================== */
 .container {
-  max-width: 1540px;
+  max-width: 100%;
   width: 100%;
   margin: 0 auto;
-  padding: 24px;
+  padding: 16px 24px;
   min-width: 0;
   box-sizing: border-box;
 }
@@ -476,20 +476,100 @@ button:disabled {
 .red { color: var(--rose-600); }
 
 /* ==============================================================================
-   DASHBOARD GRID & FOR BLAST SPLITTING
+   DASHBOARD & OPERATIONS FULLSCREEN LAYOUT
    ============================================================================== */
-.dashboard-grid {
-  display: grid;
-  grid-template-columns: 350px minmax(0, 1fr);
-  gap: 24px;
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
+.temp-horizontal-card {
+  background: white;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--slate-200);
+  box-shadow: var(--shadow-sm);
+  padding: 16px 20px;
 }
 
-.dashboard-grid > * {
-  min-width: 0;
-  max-width: 100%;
+.temp-horizontal-grid {
+  display: grid;
+  grid-template-columns: 2fr 1.1fr 1.3fr 1.3fr 1fr;
+  gap: 12px;
+  align-items: end;
+}
+
+.temp-reading {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: white;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 11.5px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+
+.temp-reading.harvest {
+  border-color: #86efac;
+  background: #f0fdf4;
+}
+
+.temp-empty {
+  font-size: 12px;
+  color: #64748b;
+  font-style: italic;
+}
+
+.operations-card {
+  background: white;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--slate-200);
+  box-shadow: var(--shadow-sm);
+  padding: 16px 18px;
+}
+
+.operations-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.operations-table th {
+  background: #f8fafc;
+  color: #334155;
+  font-weight: 800;
+  font-size: 11px;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  padding: 9px 8px;
+  border-bottom: 2px solid #e2e8f0;
+  white-space: nowrap;
+}
+
+.operations-table td {
+  padding: 7px 8px;
+  font-size: 12px;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: middle;
+}
+
+.operations-table tr:hover td {
+  background-color: #f8fafc;
+}
+
+.operations-table .actions {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  align-items: center;
+  min-width: 210px;
+}
+
+.operations-table .actions button {
+  font-size: 10.5px;
+  padding: 4px 7px;
+  border-radius: 4px;
+  line-height: 1.2;
+}
+
+#queueTable {
+  min-width: 100%;
+  width: 100%;
 }
 
 .product-entry {
@@ -559,10 +639,6 @@ table {
   width: 100%;
   border-collapse: collapse;
   background: white;
-}
-
-#queueTable {
-  min-width: 1150px;
 }
 
 th, td {
@@ -949,6 +1025,11 @@ tr:hover td {
 }
 
 @media (max-width: 1024px) {
+  .temp-horizontal-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
   .table-scroll-hint {
     display: inline-flex;
     align-items: center;

@@ -353,77 +353,83 @@
         </div>
       </div>
 
-      <!-- Main Dashboard Grid -->
-      <div class="dashboard-grid">
-        <!-- Left: Freezing Temperature Logger -->
-        <div>
-          <div class="card temp-panel">
-            <h2>🌡️ Product Temperature While Freezing</h2>
-            <div class="temp-field">
-              <label for="tempTruckSelect">Product Currently Freezing</label>
-              <select id="tempTruckSelect" onchange="renderTempPanel()"></select>
-            </div>
-            <div class="temp-field">
-              <label for="tempValue">Product Temp (°C)</label>
-              <input id="tempValue" type="number" step="0.1" placeholder="e.g. -18.5">
-            </div>
-            <div class="temp-field">
-              <label for="tempBy">Temperature Taken By</label>
-              <input id="tempBy" type="text" placeholder="Name of checker">
-            </div>
-            <div class="temp-field">
-              <label for="tempDecision">Decision</label>
-              <select id="tempDecision">
-                <option value="">Select decision</option>
-                <option value="For Extend">For Extend</option>
-                <option value="For Harvest">For Harvest</option>
-              </select>
-            </div>
-            <button type="button" class="btn-primary" style="width:100%;margin-top:4px;" onclick="saveFreezingTemperature()">
-              💾 Save Temperature Reading
-            </button>
-            <div style="margin-top:18px;font-weight:800;font-size:13px;color:#334155;">Recent Readings:</div>
-            <div id="tempHistory"></div>
-          </div>
-
-          <!-- Quick Search Card -->
-          <div class="card">
-            <h2>Queue Search</h2>
-            <input id="searchInput" type="text" placeholder="Search blast, queue number, or product..." oninput="renderQueue()">
+      <!-- 1. Top Card: Product Temperature While Freezing (Horizontal UI) -->
+      <div class="card temp-horizontal-card" style="margin-bottom: 20px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:14px;border-bottom:1px solid #f1f5f9;padding-bottom:10px;">
+          <h2 style="margin:0;display:flex;align-items:center;gap:8px;font-size:18px;">
+            <span>🌡️</span> Product Temperature While Freezing
+          </h2>
+          <div style="flex:1;max-width:380px;min-width:240px;">
+            <input id="searchInput" type="text" placeholder="🔍 Search queue, blast, or product..." oninput="renderQueue()" style="width:100%;padding:8px 12px;font-size:13px;">
           </div>
         </div>
 
-        <!-- Right: Today's Queue Table -->
-        <div class="card">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-            <h2 style="margin:0;">📋 Today's Queue Operations</h2>
+        <div class="temp-horizontal-grid">
+          <div class="form-group">
+            <label for="tempTruckSelect">Product Currently Freezing *</label>
+            <select id="tempTruckSelect" onchange="renderTempPanel()"></select>
+          </div>
+          <div class="form-group">
+            <label for="tempValue">Product Temp (°C) *</label>
+            <input id="tempValue" type="number" step="0.1" placeholder="e.g. -18.5">
+          </div>
+          <div class="form-group">
+            <label for="tempBy">Temperature Taken By *</label>
+            <input id="tempBy" type="text" placeholder="Name of checker">
+          </div>
+          <div class="form-group">
+            <label for="tempDecision">Decision *</label>
+            <select id="tempDecision">
+              <option value="">Select decision</option>
+              <option value="For Extend">For Extend</option>
+              <option value="For Harvest">For Harvest</option>
+            </select>
+          </div>
+          <div class="form-group" style="justify-content:flex-end;">
+            <label style="visibility:hidden;">Save</label>
+            <button type="button" class="btn-primary" style="height:42px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:6px;width:100%;" onclick="saveFreezingTemperature()">
+              💾 Save Reading
+            </button>
+          </div>
+        </div>
+
+        <div style="margin-top:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#f8fafc;padding:8px 12px;border-radius:8px;border:1px solid #e2e8f0;">
+          <span style="font-weight:800;font-size:12px;color:#334155;white-space:nowrap;">Recent Readings:</span>
+          <div id="tempHistory" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;flex:1;"></div>
+        </div>
+      </div>
+
+      <!-- 2. Today's Queue Operations Table (Fullscreen UX/UI Friendly) -->
+      <div class="card operations-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:12px;">
+          <h2 style="margin:0;font-size:19px;">📋 Today's Queue Operations</h2>
+          <div style="display:flex;gap:10px;align-items:center;">
             <button class="btn-outline" onclick="fetchQueues()">🔄 Refresh Data</button>
           </div>
-          <div class="table-scroll-hint"><span>👉 Swipe horizontally to view all 15 columns & actions</span></div>
-          <div class="table-container">
-            <table>
-              <thead>
-                <tr>
-                  <th>Queue</th>
-                  <th>Date</th>
-                  <th>Shift</th>
-                  <th>Product</th>
-                  <th>Volume</th>
-                  <th>Initial Temp</th>
-                  <th>Production Date</th>
-                  <th>Recorder</th>
-                  <th>For Layer</th>
-                  <th>Blast Freezer</th>
-                  <th>Freezing Start</th>
-                  <th>Freezing End</th>
-                  <th>Priority</th>
-                  <th>Status</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody id="queueTable"></tbody>
-            </table>
-          </div>
+        </div>
+        <div class="table-container">
+          <table class="operations-table">
+            <thead>
+              <tr>
+                <th>Queue</th>
+                <th>Date</th>
+                <th>Shift</th>
+                <th>Product</th>
+                <th>Volume</th>
+                <th>Initial Temp</th>
+                <th>Prod Date</th>
+                <th>Recorder</th>
+                <th>Layer</th>
+                <th>Freezer</th>
+                <th>Freezing Start</th>
+                <th>Freezing End</th>
+                <th>Priority</th>
+                <th>Status</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="queueTable"></tbody>
+          </table>
         </div>
       </div>
     </section>
