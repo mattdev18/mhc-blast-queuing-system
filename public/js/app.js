@@ -27,6 +27,12 @@ function escapeHTML(v) {
     .replace(/'/g, "&#039;");
 }
 
+function formatUnit(u) {
+  if (!u) return "";
+  const s = String(u).trim();
+  return s.toLowerCase() === "cases" ? "crates" : s;
+}
+
 function showToast(message, type = "success") {
   const container = document.getElementById("toastContainer");
   if (!container) return;
@@ -294,7 +300,7 @@ function renderBlastInventory() {
       <td style="font-weight:700;">${escapeHTML(r.production_date || r.date || "—")}</td>
       <td style="white-space:nowrap;color:#64748b;">${escapeHTML(new Date(r.created_at).toLocaleString())}</td>
       <td style="font-weight:800;color:#0f172a;">${escapeHTML(r.product)}</td>
-      <td style="font-weight:800;color:#15803d;">${Number(r.volume).toLocaleString(undefined, { maximumFractionDigits: 2 })} ${escapeHTML(r.unit)}</td>
+      <td style="font-weight:800;color:#15803d;">${Number(r.volume).toLocaleString(undefined, { maximumFractionDigits: 2 })} ${escapeHTML(formatUnit(r.unit))}</td>
       <td><span class="badge" style="background:#f1f5f9;color:#334155;">${escapeHTML(r.category || "Uncategorized")}</span></td>
       <td>
         <button type="button" class="btn-outline" style="color:#dc2626;padding:5px 10px;" onclick="deleteInventoryItem(${r.id})">
@@ -309,7 +315,8 @@ function renderBlastInventory() {
   // Summary Totals by unit
   const totals = {};
   inventoryList.forEach((r) => {
-    totals[r.unit] = (totals[r.unit] || 0) + parseFloat(r.volume || 0);
+    const u = formatUnit(r.unit || "kg");
+    totals[u] = (totals[u] || 0) + parseFloat(r.volume || 0);
   });
 
   if (sumBox) {
@@ -322,7 +329,7 @@ function renderBlastInventory() {
         .map(
           ([unit, total]) => `
         <div style="background:#f0fdf4;padding:12px 18px;border-radius:10px;border:1px solid #bbf7d0;">
-          <strong style="font-size:18px;color:#15803d;">${total.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${escapeHTML(unit)}</strong><br>
+          <strong style="font-size:18px;color:#15803d;">${total.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${escapeHTML(formatUnit(unit))}</strong><br>
           <span style="font-size:12px;color:#16a34a;font-weight:700;">Total Available</span>
         </div>
       `
@@ -342,7 +349,7 @@ function renderCategoryInventoryBoard() {
   inventoryList.forEach((r) => {
     const cat = r.category || "Uncategorized";
     const prod = r.product.trim();
-    const unit = r.unit || "kg";
+    const unit = formatUnit(r.unit || "kg");
     const pDate = r.production_date || "—";
     const key = `${prod.toLowerCase()}||${unit.toLowerCase()}||${pDate}`;
 
@@ -367,7 +374,7 @@ function renderCategoryInventoryBoard() {
         a.productionDate.localeCompare(b.productionDate)
       );
       const catTotal = items.reduce((acc, it) => acc + it.volume, 0);
-      const unit = items[0]?.unit || "kg";
+      const unit = formatUnit(items[0]?.unit || "kg");
 
       return `
       <div style="background:#fff;border:1px solid #fed7aa;border-radius:10px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
@@ -381,7 +388,7 @@ function renderCategoryInventoryBoard() {
               (it) => `
             <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #fff7ed;">
               <span style="font-weight:700;">${escapeHTML(it.product)} <small style="color:#64748b;">(${escapeHTML(it.productionDate)})</small></span>
-              <span style="font-weight:800;color:#15803d;">${it.volume.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${escapeHTML(it.unit)}</span>
+              <span style="font-weight:800;color:#15803d;">${it.volume.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${escapeHTML(formatUnit(it.unit))}</span>
             </div>
           `
             )
@@ -681,10 +688,22 @@ function priorityBadge(priority) {
 }
 
 function volumeCellHTML(truck) {
-  const base = escapeHTML(truck.volume || "—");
+  let base = escapeHTML(truck.volume || "—");
   const prods = truck.products || [];
-  if (truck.status === "Waiting" && prods.some((p) => p.allocated > 0)) {
-    const remaining = prods.map((p) => `${p.product}: ${p.amount - p.allocated} ${p.unit}`).join("; ");
+  // If base starts with "PRODUCT: ", strip product name for single product to prevent duplication
+  if (prods.length === 1 && truck.product && base.toUpperCase().startsWith(truck.product.toUpperCase() + ":")) {
+    base = base.substring(truck.product.length + 1).trim();
+  }
+
+  if (truck.status === "Waiting" && prods.some((p) => (p.allocated || 0) > 0)) {
+    const isSingle = prods.length === 1;
+    const remaining = prods
+      .map((p) => {
+        const left = (p.amount || 0) - (p.allocated || 0);
+        const u = formatUnit(p.unit || "kg");
+        return isSingle ? `${left} ${u}` : `${p.product}: ${left} ${u}`;
+      })
+      .join("; ");
     return `${base}<br><small style="color:#b45309;font-weight:800;">Remaining: ${escapeHTML(remaining)}</small>`;
   }
   return base;
@@ -1642,17 +1661,49 @@ document.addEventListener("DOMContentLoaded", () => {
   const queueDateInput = document.getElementById("queueDate");
   if (queueDateInput) queueDateInput.value = todayDateStr();
 
+  // Global Auto-Uppercase for all text and search inputs & textareas
+  document.addEventListener("input", (e) => {
+    const t = e.target;
+    if (!t) return;
+    if (
+      (t.tagName === "INPUT" && (t.type === "text" || t.type === "search" || !t.type)) ||
+      t.tagName === "TEXTAREA"
+    ) {
+      const start = t.selectionStart;
+      const end = t.selectionEnd;
+      const val = t.value;
+      const upper = val.toUpperCase();
+      if (val !== upper) {
+        t.value = upper;
+        if (start !== null && end !== null) {
+          t.setSelectionRange(start, end);
+        }
+      }
+    }
+  });
+
   // Inventory Form submit
   const invForm = document.getElementById("blastInventoryForm");
+  let isSubmittingInv = false;
   if (invForm) {
     invForm.addEventListener("submit", async (e) => {
       e.preventDefault();
+      if (isSubmittingInv) return;
+      isSubmittingInv = true;
+
+      const submitBtn = invForm.querySelector('button[type="submit"]');
+      const origBtnText = submitBtn ? submitBtn.innerHTML : "";
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = "⏳ SAVING TO CLOUD...";
+      }
+
       const payload = {
         date: document.getElementById("blastLogDate").value,
         productionDate: document.getElementById("blastLogProductionDate").value.trim(),
-        product: document.getElementById("blastLogProduct").value.trim(),
+        product: document.getElementById("blastLogProduct").value.trim().toUpperCase(),
         volume: document.getElementById("blastLogVolume").value,
-        unit: document.getElementById("blastLogUnit").value,
+        unit: formatUnit(document.getElementById("blastLogUnit").value),
         category: document.getElementById("blastLogCategory").value,
       };
 
@@ -1675,28 +1726,51 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       } catch (err) {
         showToast("Network error submitting inventory", "error");
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = origBtnText;
+        }
+        isSubmittingInv = false;
       }
     });
   }
 
   // Registration Form submit
   const regForm = document.getElementById("registrationForm");
+  let isSubmittingReg = false;
   if (regForm) {
     regForm.addEventListener("submit", async (e) => {
       e.preventDefault();
+      if (isSubmittingReg) return;
+      isSubmittingReg = true;
+
+      const submitBtn = regForm.querySelector('button[type="submit"]');
+      const origBtnText = submitBtn ? submitBtn.innerHTML : "";
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = "⏳ GENERATING QUEUE NUMBER...";
+      }
+
       const queueDate = document.getElementById("queueDate").value;
       const queueShift = document.getElementById("queueShift").value;
-      const recorderChecker = document.getElementById("recorderChecker").value.trim();
+      const recorderChecker = document.getElementById("recorderChecker").value.trim().toUpperCase();
       const priority = document.getElementById("priority").value;
       const isForLayer = document.getElementById("forLayer").value === "Yes";
 
       const rows = Array.from(document.querySelectorAll("#productEntries .product-entry"));
-      const products = rows.map((r) => ({
-        product: r.querySelector(".product-name").value.trim(),
-        volume: r.querySelector(".product-volume").value.trim(),
-        productTemperature: r.querySelector(".product-temperature").value,
-        productionDate: r.querySelector(".product-production-date").value,
-      }));
+      const products = rows.map((r) => {
+        let vol = r.querySelector(".product-volume").value.trim().toUpperCase();
+        if (vol.toLowerCase().includes("cases")) {
+          vol = vol.replace(/cases/gi, "crates");
+        }
+        return {
+          product: r.querySelector(".product-name").value.trim().toUpperCase(),
+          volume: vol,
+          productTemperature: r.querySelector(".product-temperature").value,
+          productionDate: r.querySelector(".product-production-date").value,
+        };
+      });
 
       // Validate stock availability
       for (const p of products) {
@@ -1714,6 +1788,11 @@ document.addEventListener("DOMContentLoaded", () => {
             `Insufficient inventory for ${p.product} (Production Date: ${p.productionDate}). Available: ${avail}, Requested: ${reqAmount}`,
             "error"
           );
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = origBtnText;
+          }
+          isSubmittingReg = false;
           return;
         }
       }
@@ -1776,6 +1855,12 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       } catch (err) {
         showToast("Network error submitting queue", "error");
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = origBtnText;
+        }
+        isSubmittingReg = false;
       }
     });
   }

@@ -127,6 +127,10 @@ app.get("/api/inventory", async (req, res) => {
   }
 });
 
+// Debounce maps to prevent accidental double-click / rapid duplicate requests
+const recentInvSubmissions = new Map();
+const recentQueueSubmissions = new Map();
+
 // 3. Inventory - Add Stock
 app.post("/api/inventory", async (req, res) => {
   try {
@@ -135,28 +139,65 @@ app.post("/api/inventory", async (req, res) => {
       return res.status(400).json({ error: "Product, volume, and production date are required." });
     }
 
+    const pName = product.trim().toUpperCase();
+    const pDate = normDate(productionDate);
+    const pUnit = (unit || "kg").trim().toLowerCase() === "cases" ? "crates" : (unit || "kg").trim();
     const numVolume = parseFloat(volume);
     const createdAt = new Date().toISOString();
+    const nowMs = Date.now();
 
-    const insertResult = await db.execute({
-      sql: `INSERT INTO blast_inventory (date, production_date, product, volume, unit, category, notes, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      args: [
-        date || todayString(),
-        productionDate.trim(),
-        product.trim(),
-        numVolume,
-        unit || "kg",
-        category || "Uncategorized",
-        notes || "",
-        createdAt,
-      ],
-    });
+    // 1. Debounce rapid identical submissions (within 4 seconds) to prevent double submit
+    const debounceKey = `${normProductName(pName)}_${pDate}_${numVolume}_${pUnit.toLowerCase()}`;
+    if (recentInvSubmissions.has(debounceKey) && nowMs - recentInvSubmissions.get(debounceKey) < 4000) {
+      return res.json({ success: true, debounced: true, message: "Duplicate submission ignored." });
+    }
+    recentInvSubmissions.set(debounceKey, nowMs);
+    // Cleanup old debounce keys
+    for (const [k, t] of recentInvSubmissions.entries()) {
+      if (nowMs - t > 10000) recentInvSubmissions.delete(k);
+    }
+
+    // 2. Check if this product, production date, and unit already has an existing inventory lot
+    const allInv = await db.execute("SELECT * FROM blast_inventory");
+    const existingMatch = allInv.rows.find(
+      (r) =>
+        normProductName(r.product) === normProductName(pName) &&
+        normDate(r.production_date) === pDate &&
+        (r.unit || "kg").toLowerCase() === pUnit.toLowerCase()
+    );
+
+    let targetId;
+    if (existingMatch) {
+      // Merge into existing lot: add to available volume so rows/kilos do not duplicate
+      const newLotVol = Math.round((parseFloat(existingMatch.volume) + numVolume + Number.EPSILON) * 100) / 100;
+      await db.execute({
+        sql: "UPDATE blast_inventory SET volume = ?, date = ?, category = COALESCE(?, category), notes = COALESCE(?, notes) WHERE id = ?",
+        args: [newLotVol, date || todayString(), category || null, notes || null, existingMatch.id],
+      });
+      targetId = existingMatch.id;
+    } else {
+      // Insert new inventory lot
+      const insertResult = await db.execute({
+        sql: `INSERT INTO blast_inventory (date, production_date, product, volume, unit, category, notes, created_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [
+          date || todayString(),
+          pDate,
+          pName,
+          numVolume,
+          pUnit,
+          category || "Uncategorized",
+          notes || "",
+          createdAt,
+        ],
+      });
+      targetId = Number(insertResult.lastInsertRowid);
+    }
 
     // Calculate total stock remaining for this product & unit
     const sumResult = await db.execute({
       sql: "SELECT SUM(volume) as total FROM blast_inventory WHERE LOWER(product) = LOWER(?) AND unit = ?",
-      args: [product.trim(), unit || "kg"],
+      args: [pName, pUnit],
     });
     const totalRemaining = sumResult.rows[0]?.total || numVolume;
 
@@ -166,16 +207,16 @@ app.post("/api/inventory", async (req, res) => {
             VALUES (?, 'REGISTER', ?, ?, ?, ?, ?, '', '', ?)`,
       args: [
         createdAt,
-        product.trim(),
-        productionDate.trim(),
+        pName,
+        pDate,
         numVolume,
-        unit || "kg",
+        pUnit,
         totalRemaining,
         `Category: ${category || "Uncategorized"}`,
       ],
     });
 
-    res.json({ success: true, id: Number(insertResult.lastInsertRowid) });
+    res.json({ success: true, id: targetId });
   } catch (err) {
     console.error("POST /api/inventory error:", err);
     res.status(500).json({ error: err.message });
@@ -281,6 +322,19 @@ app.post("/api/queues", async (req, res) => {
     const targetDate = queueDate || today;
     const dateShift = `${targetDate} / ${queueShift || "Day Shift"}`;
     const now = new Date();
+    const nowMs = Date.now();
+
+    // 1. Debounce rapid duplicate queue submissions (within 4 seconds) to prevent double queuing
+    const qDebounceKey = `${targetDate}_${queueShift}_${(recorderChecker || "").trim().toUpperCase()}_${JSON.stringify(products)}`;
+    if (recentQueueSubmissions.has(qDebounceKey) && nowMs - recentQueueSubmissions.get(qDebounceKey) < 4000) {
+      const cached = recentQueueSubmissions.get(qDebounceKey + "_record");
+      if (cached) return res.json(cached);
+    }
+    recentQueueSubmissions.set(qDebounceKey, nowMs);
+    for (const [k, t] of recentQueueSubmissions.entries()) {
+      if (nowMs - t > 10000) recentQueueSubmissions.delete(k);
+    }
+
     const newQueueNum = await getNextQueueNumber(today);
     const recordId = "QREC_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
 
@@ -304,8 +358,10 @@ app.post("/api/queues", async (req, res) => {
 
     // Process & deduct from blast_inventory for each product
     for (const item of products) {
+      item.product = (item.product || "").trim().toUpperCase();
       const parsedAmount = parseFloat(String(item.volume || "0").replace(/[^0-9.]/g, "")) || 0;
-      const parsedUnit = (String(item.volume || "").match(/[a-zA-Z]+/g) || ["kg"])[0];
+      let parsedUnit = (String(item.volume || "").match(/[a-zA-Z]+/g) || ["kg"])[0];
+      if (parsedUnit.toLowerCase() === "cases") parsedUnit = "crates";
 
       item.amount = parsedAmount;
       item.unit = parsedUnit;
@@ -363,10 +419,17 @@ app.post("/api/queues", async (req, res) => {
       });
     }
 
+    const isSingleProd = products.length === 1;
     const prodNames = products.map((p) => p.product).join(", ");
-    const prodVols = products.map((p) => `${p.product}: ${p.volume}`).join("; ");
-    const prodTemps = products.map((p) => `${p.product}: ${p.productTemperature || "0"}°C`).join("; ");
-    const prodDates = products.map((p) => `${p.product}: ${p.productionDate}`).join("; ");
+    const prodVols = isSingleProd
+      ? products[0].volume
+      : products.map((p) => `${p.product}: ${p.volume}`).join("; ");
+    const prodTemps = isSingleProd
+      ? `${products[0].productTemperature || "0"}°C`
+      : products.map((p) => `${p.product}: ${p.productTemperature || "0"}°C`).join("; ");
+    const prodDates = isSingleProd
+      ? products[0].productionDate
+      : products.map((p) => `${p.product}: ${p.productionDate}`).join("; ");
 
     await db.execute({
       sql: `INSERT INTO blast_queues (
@@ -405,7 +468,7 @@ app.post("/api/queues", async (req, res) => {
       ],
     });
 
-    res.json({
+    const responseData = {
       success: true,
       queue: newQueueNum,
       id: recordId,
@@ -418,7 +481,10 @@ app.post("/api/queues", async (req, res) => {
         queueDate: targetDate,
         queueShift,
       },
-    });
+    };
+    recentQueueSubmissions.set(qDebounceKey + "_record", responseData);
+
+    res.json(responseData);
   } catch (err) {
     console.error("POST /api/queues error:", err);
     res.status(500).json({ error: err.message });
@@ -648,10 +714,17 @@ app.post("/api/queues/:id/allocate", async (req, res) => {
       };
     });
 
+    const isSingleChild = childProducts.length === 1;
     const prodNames = childProducts.map((p) => p.product).join(", ");
-    const prodVols = childProducts.map((p) => `${p.product}: ${p.volume}`).join("; ");
-    const prodTemps = childProducts.map((p) => `${p.product}: ${p.productTemperature || "0"}°C`).join("; ");
-    const prodDates = childProducts.map((p) => `${p.product}: ${p.productionDate}`).join("; ");
+    const prodVols = isSingleChild
+      ? childProducts[0].volume
+      : childProducts.map((p) => `${p.product}: ${p.volume}`).join("; ");
+    const prodTemps = isSingleChild
+      ? `${childProducts[0].productTemperature || "0"}°C`
+      : childProducts.map((p) => `${p.product}: ${p.productTemperature || "0"}°C`).join("; ");
+    const prodDates = isSingleChild
+      ? childProducts[0].productionDate
+      : childProducts.map((p) => `${p.product}: ${p.productionDate}`).join("; ");
 
     // Create child record
     await db.execute({

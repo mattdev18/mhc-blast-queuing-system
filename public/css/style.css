@@ -356,6 +356,19 @@ input, select, textarea {
   transition: all 0.2s ease;
 }
 
+input[type="text"],
+input[type="search"],
+input:not([type]),
+textarea {
+  text-transform: uppercase;
+}
+
+input[type="text"]::placeholder,
+input[type="search"]::placeholder,
+textarea::placeholder {
+  text-transform: none;
+}
+
 input:focus, select:focus, textarea:focus {
   outline: none;
   border-color: var(--primary-500);
