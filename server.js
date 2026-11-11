@@ -130,6 +130,7 @@ app.get("/api/inventory", async (req, res) => {
 // Debounce maps to prevent accidental double-click / rapid duplicate requests
 const recentInvSubmissions = new Map();
 const recentQueueSubmissions = new Map();
+const recentAllocSubmissions = new Map();
 
 // 3. Inventory - Add Stock
 app.post("/api/inventory", async (req, res) => {
@@ -671,6 +672,17 @@ app.post("/api/queues/:id/allocate", async (req, res) => {
     const { id } = req.params;
     const { blast, picks } = req.body; // picks: array of { index, volume }
 
+    // 1. Debounce rapid duplicate allocation clicks on the same queue (within 2.5 seconds)
+    const allocLockKey = `alloc_${id}`;
+    const nowMs = Date.now();
+    if (recentAllocSubmissions.has(allocLockKey) && nowMs - recentAllocSubmissions.get(allocLockKey) < 2500) {
+      return res.status(429).json({ error: "Kasalukuyang pinoproseso ang pag-assign sa batch na ito. Maghintay sandali." });
+    }
+    recentAllocSubmissions.set(allocLockKey, nowMs);
+    for (const [k, t] of recentAllocSubmissions.entries()) {
+      if (nowMs - t > 10000) recentAllocSubmissions.delete(k);
+    }
+
     const parentRes = await db.execute({
       sql: "SELECT * FROM blast_queues WHERE id = ?",
       args: [id],
@@ -681,18 +693,53 @@ app.post("/api/queues/:id/allocate", async (req, res) => {
     }
 
     const parent = parentRes.rows[0];
+    if (parent.status === "Allocated" || parent.status === "Cancelled") {
+      return res.status(400).json({ error: `Hindi na maaaring mag-assign: Ang queue ${parent.queue} ay ${parent.status === "Allocated" ? "fully allocated na" : "cancelled na"}.` });
+    }
+
     const parentProducts = parent.products_json ? JSON.parse(parent.products_json) : [];
     const now = new Date();
+
+    // 2. Strict validation: Ensure requested volume does NOT exceed available unallocated remaining
+    let totalAssignedInBatch = 0;
+    const validatedPicks = [];
+
+    for (const pk of (picks || [])) {
+      const idx = pk.index;
+      const p = parentProducts[idx];
+      if (!p) continue;
+
+      const toAlloc = Math.round((parseFloat(pk.volume) || 0) * 100) / 100;
+      const alreadyAlloc = parseFloat(p.allocated) || 0;
+      const totalAmount = parseFloat(p.amount) || parseFloat(String(p.volume || "").replace(/[^0-9.]/g, "")) || 0;
+      const remaining = Math.max(0, Math.round((totalAmount - alreadyAlloc) * 100) / 100);
+
+      if (toAlloc > 0) {
+        if (toAlloc > remaining + 0.001) {
+          return res.status(400).json({
+            error: `Hindi magtutuloy ang pag-assign: Lumagpas ang kilos para sa ${p.product}. Hinihingi: ${toAlloc} ${p.unit || "kg"}, pero ${remaining} ${p.unit || "kg"} na lang ang natitira sa inventory lot na ito.`
+          });
+        }
+        validatedPicks.push({ index: idx, volume: toAlloc });
+        totalAssignedInBatch += toAlloc;
+      }
+    }
+
+    if (validatedPicks.length === 0 || totalAssignedInBatch <= 0) {
+      return res.status(400).json({ error: "Hindi magtutuloy: Walang wastong kilos na inassign para sa kahit isang produkto." });
+    }
+
     const splitCount = (parent.split_count || 0) + 1;
 
-    // Check if allocating all remaining
+    // Apply allocated amounts to parent products and check if 100% covered
     let allPicksCovered = true;
     for (let i = 0; i < parentProducts.length; i++) {
       const p = parentProducts[i];
-      const pick = picks.find((pk) => pk.index === i);
-      const toAlloc = pick ? parseFloat(pick.volume) : 0;
-      p.allocated = (parseFloat(p.allocated) || 0) + toAlloc;
-      if (p.allocated < p.amount - 0.01) {
+      const matchPick = validatedPicks.find((pk) => pk.index === i);
+      const toAlloc = matchPick ? matchPick.volume : 0;
+      p.allocated = Math.round(((parseFloat(p.allocated) || 0) + toAlloc) * 100) / 100;
+      const totalAmount = parseFloat(p.amount) || parseFloat(String(p.volume || "").replace(/[^0-9.]/g, "")) || 0;
+      if (p.allocated < totalAmount - 0.01) {
         allPicksCovered = false;
       }
     }
@@ -701,7 +748,7 @@ app.post("/api/queues/:id/allocate", async (req, res) => {
     const childQueueLabel = isFullLot ? parent.queue : `${parent.queue}-${splitCount}`;
     const childId = `QREC_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
 
-    const childProducts = picks.map(({ index, volume }) => {
+    const childProducts = validatedPicks.map(({ index, volume }) => {
       const src = parentProducts[index];
       return {
         product: src.product,

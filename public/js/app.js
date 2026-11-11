@@ -713,7 +713,7 @@ function renderAllocPanel(truck) {
   const prods = truck.products || [];
   const openWithIndices = prods
     .map((p, origIdx) => ({ p, origIdx }))
-    .filter(({ p }) => (p.amount || 0) > (p.allocated || 0));
+    .filter(({ p }) => Math.round(((p.amount || 0) - (p.allocated || 0)) * 100) / 100 > 0.001);
 
   if (openWithIndices.length === 0) return "";
 
@@ -725,18 +725,19 @@ function renderAllocPanel(truck) {
       <div style="font-size:11px;font-weight:800;color:#334155;margin-bottom:6px;">SPLIT / PUT IN BLAST</div>
       ${openWithIndices
         .map(({ p, origIdx }) => {
-          const remaining = Math.max(0, (p.amount || 0) - (p.allocated || 0));
+          const remaining = Math.max(0, Math.round(((p.amount || 0) - (p.allocated || 0)) * 100) / 100);
           const hasDraftVal = draft.volumes && draft.volumes[origIdx] !== undefined && draft.volumes[origIdx] !== "";
-          const displayVal = hasDraftVal ? draft.volumes[origIdx] : remaining;
+          const displayVal = hasDraftVal ? Math.min(remaining, parseFloat(draft.volumes[origIdx]) || 0) : remaining;
+          const u = formatUnit(p.unit || "kg");
           return `
             <div style="margin-bottom:6px;">
-              <div style="font-size:11px;font-weight:700;">${escapeHTML(p.product)} <small style="color:#64748b;">(Left: ${remaining} ${p.unit})</small></div>
+              <div style="font-size:11px;font-weight:700;">${escapeHTML(p.product)} <small style="color:#64748b;">(Left: ${remaining} ${escapeHTML(u)})</small></div>
               <div style="display:flex;gap:4px;align-items:center;">
                 <input type="number" id="alloc_${truck.id}_${origIdx}" min="0.01" max="${remaining}" step="any"
                   value="${displayVal}"
-                  oninput="updateAllocVol('${truck.id}', ${origIdx}, this.value)"
+                  oninput="if(parseFloat(this.value) > ${remaining}) { this.value = ${remaining}; showToast('Hindi maaaring lumagpas sa natitirang ${remaining} ${u}.', 'warning'); } updateAllocVol('${truck.id}', ${origIdx}, this.value);"
                   style="width:110px;padding:4px 8px;font-size:12px;">
-                <span style="font-size:11px;font-weight:700;">${escapeHTML(p.unit)}</span>
+                <span style="font-size:11px;font-weight:700;">${escapeHTML(u)}</span>
               </div>
             </div>
           `;
@@ -748,7 +749,7 @@ function renderAllocPanel(truck) {
             .map((b) => `<option value="${b}" ${b === currentBlast ? "selected" : ""}>${b}</option>`)
             .join("")}
         </select>
-        <button type="button" class="btn-primary" style="padding:5px 10px;font-size:11px;" onclick="allocateQueueBatch('${truck.id}')">
+        <button type="button" id="assignBtn_${truck.id}" class="btn-primary" style="padding:5px 10px;font-size:11px;" onclick="allocateQueueBatch('${truck.id}')">
           Assign
         </button>
       </div>
@@ -756,41 +757,54 @@ function renderAllocPanel(truck) {
   `;
 }
 
+const allocatingQueueIds = new Set();
+
 async function allocateQueueBatch(id) {
+  if (allocatingQueueIds.has(id)) return;
   const truck = queueList.find((t) => t.id === id);
   if (!truck) return;
-  saveAllActiveAllocInputs();
 
-  const draft = allocDraftState[id] || {};
-  const sel = document.getElementById(`blastSel_${id}`);
-  const blast = (sel ? sel.value : draft.blast) || "Blast 1";
-  const prods = truck.products || [];
-
-  const picks = [];
-  for (let i = 0; i < prods.length; i++) {
-    const input = document.getElementById(`alloc_${id}_${i}`);
-    const remaining = Math.max(0, (prods[i].amount || 0) - (prods[i].allocated || 0));
-    let vol = 0;
-    if (input && input.value !== "") {
-      vol = parseFloat(input.value) || 0;
-    } else if (draft.volumes && draft.volumes[i] !== undefined && draft.volumes[i] !== "") {
-      vol = parseFloat(draft.volumes[i]) || 0;
-    }
-    if (vol > 0) {
-      if (vol > remaining + 0.001) {
-        showToast(`Volume for ${prods[i].product} cannot exceed remaining ${remaining} ${prods[i].unit}`, "warning");
-        return;
-      }
-      picks.push({ index: i, volume: vol });
-    }
+  const assignBtn = document.getElementById(`assignBtn_${id}`) || document.querySelector(`button[onclick*="allocateQueueBatch('${id}')"]`);
+  if (assignBtn) {
+    assignBtn.disabled = true;
+    assignBtn.textContent = "Assigning...";
   }
-
-  if (picks.length === 0) {
-    showToast("Please enter volume for at least one product.", "warning");
-    return;
-  }
+  allocatingQueueIds.add(id);
 
   try {
+    saveAllActiveAllocInputs();
+
+    const draft = allocDraftState[id] || {};
+    const sel = document.getElementById(`blastSel_${id}`);
+    const blast = (sel ? sel.value : draft.blast) || "Blast 1";
+    const prods = truck.products || [];
+
+    const picks = [];
+    for (let i = 0; i < prods.length; i++) {
+      const input = document.getElementById(`alloc_${id}_${i}`);
+      const remaining = Math.max(0, Math.round(((prods[i].amount || 0) - (prods[i].allocated || 0)) * 100) / 100);
+      let vol = 0;
+      if (input && input.value !== "") {
+        vol = parseFloat(input.value) || 0;
+      } else if (draft.volumes && draft.volumes[i] !== undefined && draft.volumes[i] !== "") {
+        vol = parseFloat(draft.volumes[i]) || 0;
+      }
+
+      if (vol > 0) {
+        // STRICT CHECK: Kapag lumagpas ang kilos sa natitira sa inventory, hindi na ito magtutuloy
+        if (vol > remaining + 0.001) {
+          showToast(`Hindi magtutuloy ang pag-assign: Lumagpas ang kilos para sa ${prods[i].product}. Hinihingi: ${vol} ${formatUnit(prods[i].unit)}, pero ${remaining} ${formatUnit(prods[i].unit)} na lang ang natitira sa inventory.`, "error");
+          return;
+        }
+        picks.push({ index: i, volume: vol });
+      }
+    }
+
+    if (picks.length === 0) {
+      showToast("Mangyaring maglagay ng kilos para sa kahit isang produkto.", "warning");
+      return;
+    }
+
     const res = await fetch(`/api/queues/${id}/allocate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -804,10 +818,16 @@ async function allocateQueueBatch(id) {
       await fetchQueues();
     } else {
       const err = await res.json();
-      showToast(err.error || "Allocation failed", "error");
+      showToast(err.error || "Hindi nagtuloy ang pag-assign", "error");
     }
   } catch (e) {
-    showToast("Network error allocating queue", "error");
+    showToast("Network error sa pag-assign ng queue", "error");
+  } finally {
+    allocatingQueueIds.delete(id);
+    if (assignBtn) {
+      assignBtn.disabled = false;
+      assignBtn.textContent = "Assign";
+    }
   }
 }
 
