@@ -13,26 +13,28 @@
        HEADER
   ========================================================================== -->
   <header>
-    <div class="brand-area">
-      <div class="logo-container">
-        <img
-          src="/mhc-logo.png"
-          alt="May Harvest Corporation Logo"
-          class="mhc-logo"
-        >
+    <div class="header-inner">
+      <div class="brand-area">
+        <div class="logo-container">
+          <img
+            src="/mhc-logo.png"
+            alt="May Harvest Corporation Logo"
+            class="mhc-logo"
+          >
+        </div>
+        <div class="brand-text">
+          <h1>MAY HARVEST CORPORATION</h1>
+          <h2>PRODUCT QUEUING SYSTEM</h2>
+          <small>Product Queuing & Blast Freezing Cloud Management</small>
+        </div>
       </div>
-      <div class="brand-text">
-        <h1>MAY HARVEST CORPORATION</h1>
-        <h2>PRODUCT QUEUING SYSTEM</h2>
-        <small>Product Queuing & Blast Freezing Cloud Management</small>
-      </div>
-    </div>
 
-    <div class="header-right">
-      <div id="cloudStatusPill" class="cloud-pill">
-        <span class="cloud-dot"></span> Connecting...
+      <div class="header-right">
+        <div id="cloudStatusPill" class="cloud-pill">
+          <span class="cloud-dot"></span> Connecting...
+        </div>
+        <div id="clock">--:--:--</div>
       </div>
-      <div id="clock">--:--:--</div>
     </div>
   </header>
 
@@ -40,21 +42,23 @@
        NAVIGATION TABS
   ========================================================================== -->
   <nav class="navbar">
-    <button class="nav-btn active" onclick="showScreen('blastInventory', this)">
-      📋 Blast Product Log & Inventory
-    </button>
-    <button class="nav-btn" onclick="showScreen('registration', this)">
-      📦 Product Queuing for Blast
-    </button>
-    <button class="nav-btn" onclick="showScreen('dashboard', this)">
-      ❄️ Blast Freezing Dashboard
-    </button>
-    <button class="nav-btn" onclick="showScreen('liveBoard', this)">
-      📺 Live TV Queue Board
-    </button>
-    <button class="nav-btn" onclick="showScreen('reports', this)">
-      📊 Reports / Cloud Backup
-    </button>
+    <div class="navbar-inner">
+      <button class="nav-btn active" onclick="showScreen('blastInventory', this)">
+        📋 Blast Product Log & Inventory
+      </button>
+      <button class="nav-btn" onclick="showScreen('registration', this)">
+        📦 Product Queuing for Blast
+      </button>
+      <button class="nav-btn" onclick="showScreen('dashboard', this)">
+        ❄️ Blast Freezing Dashboard
+      </button>
+      <button class="nav-btn" onclick="showScreen('liveBoard', this)">
+        📺 Live TV Queue Board
+      </button>
+      <button class="nav-btn" onclick="showScreen('reports', this)">
+        📊 Reports / Cloud Backup
+      </button>
+    </div>
   </nav>
 
   <div class="container">
@@ -299,42 +303,58 @@
          TAB 3: BLAST FREEZING DASHBOARD
     ======================================================================== -->
     <section id="dashboard" class="screen">
-      <!-- KPI Stats -->
+      <!-- KPI Stats - Executive Overview Cards -->
       <div class="stats">
-        <div class="stat-card">
-          <h3>Waiting</h3>
+        <div class="stat-card stat-waiting">
+          <div class="stat-header">
+            <span class="stat-dot dot-blue"></span>
+            <h3>Waiting</h3>
+          </div>
           <div class="stat-number blue" id="waitingCount">0</div>
         </div>
-        <div class="stat-card">
-          <h3>In Blast Queue</h3>
+        <div class="stat-card stat-called">
+          <div class="stat-header">
+            <span class="stat-dot dot-amber"></span>
+            <h3>In Blast Queue</h3>
+          </div>
           <div class="stat-number orange" id="calledCount">0</div>
         </div>
-        <div class="stat-card">
-          <h3>Loading / Freezing</h3>
+        <div class="stat-card stat-loading">
+          <div class="stat-header">
+            <span class="stat-dot dot-orange"></span>
+            <h3>Loading / Freezing</h3>
+          </div>
           <div class="stat-number orange" id="loadingCount">0</div>
         </div>
-        <div class="stat-card">
-          <h3>Completed / Harvested</h3>
+        <div class="stat-card stat-completed">
+          <div class="stat-header">
+            <span class="stat-dot dot-green"></span>
+            <h3>Completed / Harvested</h3>
+          </div>
           <div class="stat-number green" id="completedCount">0</div>
         </div>
-        <div class="stat-card">
-          <h3>Total Today</h3>
+        <div class="stat-card stat-total">
+          <div class="stat-header">
+            <span class="stat-dot dot-slate"></span>
+            <h3>Total Today</h3>
+          </div>
           <div class="stat-number gray" id="totalCount">0</div>
         </div>
       </div>
 
       <!-- For Blast Inventory Card -->
-      <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:12px;">
+      <div class="card card-section">
+        <div class="card-section-header">
           <div>
-            <h2 style="margin:0;">📦 For Blast Inventory (Batch Splitting & Allocation)</h2>
-            <p style="color:#64748b;font-size:13px;margin-top:2px;">
+            <h2 class="card-section-title">
+              <span>📦</span> For Blast Inventory (Batch Splitting & Allocation)
+            </h2>
+            <p class="card-section-desc">
               Registered queue batches waiting for allocation into Blast 1, 2, 3, or 4. One registration can be split across freezers.
             </p>
           </div>
-          <div id="forBlastSummary" style="display:flex;gap:10px;flex-wrap:wrap;"></div>
+          <div id="forBlastSummary" class="card-section-summary"></div>
         </div>
-        <div class="table-scroll-hint"><span>👉 Swipe horizontally to view full table columns</span></div>
         <div class="table-container">
           <table>
             <thead>
@@ -353,14 +373,16 @@
         </div>
       </div>
 
-      <!-- 1. Top Card: Product Temperature While Freezing (Horizontal UI) -->
-      <div class="card temp-horizontal-card" style="margin-bottom: 20px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:14px;border-bottom:1px solid #f1f5f9;padding-bottom:10px;">
-          <h2 style="margin:0;display:flex;align-items:center;gap:8px;font-size:18px;">
-            <span>🌡️</span> Product Temperature While Freezing
-          </h2>
-          <div style="flex:1;max-width:380px;min-width:240px;">
-            <input id="searchInput" type="text" placeholder="🔍 Search queue, blast, or product..." oninput="renderQueue()" style="width:100%;padding:8px 12px;font-size:13px;">
+      <!-- 1. Top Card: Product Temperature While Freezing (Refined Instrumentation Bar) -->
+      <div class="card temp-horizontal-card">
+        <div class="temp-header-row">
+          <div class="temp-header-title">
+            <h2><span>🌡️</span> Product Temperature While Freezing</h2>
+            <span class="qa-badge">● Freezing QA Log</span>
+          </div>
+          <div class="search-box-wrapper">
+            <span class="search-icon">🔍</span>
+            <input id="searchInput" type="text" placeholder="Search queue, blast, or product..." oninput="renderQueue()">
           </div>
         </div>
 
@@ -371,11 +393,14 @@
           </div>
           <div class="form-group">
             <label for="tempValue">Product Temp (°C) *</label>
-            <input id="tempValue" type="number" step="0.1" placeholder="e.g. -18.5">
+            <div class="input-unit-wrapper">
+              <input id="tempValue" type="number" step="0.1" placeholder="e.g. -18.5">
+              <span class="unit-tag">°C</span>
+            </div>
           </div>
           <div class="form-group">
             <label for="tempBy">Temperature Taken By *</label>
-            <input id="tempBy" type="text" placeholder="Name of checker">
+            <input id="tempBy" type="text" placeholder="Checker name">
           </div>
           <div class="form-group">
             <label for="tempDecision">Decision *</label>
@@ -385,47 +410,56 @@
               <option value="For Harvest">For Harvest</option>
             </select>
           </div>
-          <div class="form-group" style="justify-content:flex-end;">
+          <div class="form-group temp-submit-col">
             <label style="visibility:hidden;">Save</label>
-            <button type="button" class="btn-primary" style="height:42px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:6px;width:100%;" onclick="saveFreezingTemperature()">
-              💾 Save Reading
+            <button type="button" class="btn-save-temp" onclick="saveFreezingTemperature()">
+              <span>💾</span> Save Reading
             </button>
           </div>
         </div>
 
-        <div style="margin-top:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#f8fafc;padding:8px 12px;border-radius:8px;border:1px solid #e2e8f0;">
-          <span style="font-weight:800;font-size:12px;color:#334155;white-space:nowrap;">Recent Readings:</span>
-          <div id="tempHistory" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;flex:1;"></div>
+        <div class="temp-history-bar">
+          <div class="history-label">
+            <span class="pulse-dot"></span>
+            <span>Recent Readings:</span>
+          </div>
+          <div id="tempHistory" class="history-chips"></div>
         </div>
       </div>
 
-      <!-- 2. Today's Queue Operations Table (Fullscreen UX/UI Friendly) -->
+      <!-- 2. Today's Queue Operations Table (Enterprise Data Grid) -->
       <div class="card operations-card">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:12px;">
-          <h2 style="margin:0;font-size:19px;">📋 Today's Queue Operations</h2>
+        <div class="card-section-header">
+          <div style="display:flex;align-items:center;gap:12px;">
+            <h2 class="card-section-title" style="margin:0;">
+              <span>📋</span> Today's Queue Operations
+            </h2>
+          </div>
           <div style="display:flex;gap:10px;align-items:center;">
-            <button class="btn-outline" onclick="fetchQueues()">🔄 Refresh Data</button>
+            <button class="btn-refresh" onclick="fetchQueues()">
+              <span>🔄</span> Refresh Data
+            </button>
           </div>
         </div>
         <div class="table-container">
           <table class="operations-table">
             <thead>
               <tr>
-                <th>Queue</th>
-                <th>Date</th>
-                <th>Shift</th>
+                <th style="width: 75px;">Queue</th>
+                <th style="width: 95px;">Date</th>
+                <th style="width: 80px;">Shift</th>
                 <th>Product</th>
-                <th>Volume</th>
-                <th>Initial Temp</th>
-                <th>Prod Date</th>
-                <th>Recorder</th>
-                <th>Layer</th>
-                <th>Freezer</th>
-                <th>Freezing Start</th>
-                <th>Freezing End</th>
-                <th>Priority</th>
-                <th>Status</th>
-                <th>Action</th>
+                <th style="width: 110px;">Volume</th>
+                <th style="width: 85px;">Init Temp</th>
+                <th style="width: 95px;">Prod Date</th>
+                <th style="width: 85px;">Recorder</th>
+                <th style="width: 60px;">Layer</th>
+                <th style="width: 75px;">Freezer</th>
+                <th style="width: 85px;">Start</th>
+                <th style="width: 85px;">End</th>
+                <th style="width: 90px;">Priority</th>
+                <th style="width: 110px;">Status</th>
+                <th style="min-width: 200px;">Actions</th>
               </tr>
             </thead>
             <tbody id="queueTable"></tbody>
