@@ -368,23 +368,21 @@ app.post("/api/queues", async (req, res) => {
       item.unit = parsedUnit;
       item.allocated = 0;
 
-      // Find stock matching product and production_date
-      const matchingInventory = await db.execute({
-        sql: `SELECT * FROM blast_inventory 
-              WHERE volume > 0 
-              ORDER BY 
-                CASE WHEN production_date IS NULL OR production_date = '' THEN '9999-99-99' ELSE production_date END ASC,
-                created_at ASC`,
-      });
+      // Find all inventory records for this product and production date
+      const allMatching = await db.execute("SELECT * FROM blast_inventory ORDER BY created_at ASC");
+      const matchingLots = allMatching.rows.filter(
+        (r) =>
+          normProductName(r.product) === normProductName(item.product) &&
+          normDate(r.production_date) === normDate(item.productionDate)
+      );
 
       let remainingToDeduct = parsedAmount;
-      for (const invRow of matchingInventory.rows) {
+
+      // 1. First deduct from positive lots (FIFO)
+      for (const invRow of matchingLots) {
         if (remainingToDeduct <= 0) break;
-        if (
-          normProductName(invRow.product) === normProductName(item.product) &&
-          normDate(invRow.production_date) === normDate(item.productionDate)
-        ) {
-          const avail = parseFloat(invRow.volume);
+        const avail = parseFloat(invRow.volume || 0);
+        if (avail > 0) {
           const take = Math.min(avail, remainingToDeduct);
           const newVol = Math.round((avail - take + Number.EPSILON) * 100) / 100;
           remainingToDeduct = Math.round((remainingToDeduct - take + Number.EPSILON) * 100) / 100;
@@ -396,17 +394,52 @@ app.post("/api/queues", async (req, res) => {
         }
       }
 
+      // 2. Standalone For Layer support: if isForLayer and there's still amount to deduct (or no stock was entered)
+      if (isForLayer && remainingToDeduct > 0) {
+        if (matchingLots.length > 0) {
+          // Deduct from the last matching lot, allowing it to turn negative or further negative
+          const targetLot = matchingLots[matchingLots.length - 1];
+          const currVol = parseFloat(targetLot.volume || 0);
+          const newVol = Math.round((currVol - remainingToDeduct + Number.EPSILON) * 100) / 100;
+          await db.execute({
+            sql: "UPDATE blast_inventory SET volume = ? WHERE id = ?",
+            args: [newVol, targetLot.id],
+          });
+        } else {
+          // No lot existed at all for this product & production date: insert standalone negative lot
+          await db.execute({
+            sql: `INSERT INTO blast_inventory (date, production_date, product, volume, unit, category, notes, created_at)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            args: [
+              targetDate,
+              normDate(item.productionDate) || targetDate,
+              item.product,
+              -remainingToDeduct,
+              parsedUnit,
+              "For Layer",
+              "Standalone For Layer (Negative Stock / Pending Stock Receipt)",
+              now.toISOString(),
+            ],
+          });
+        }
+        remainingToDeduct = 0;
+      }
+
       // Remaining stock after deduction
       const afterSum = await db.execute({
-        sql: "SELECT SUM(volume) as total FROM blast_inventory WHERE LOWER(product) = LOWER(?)",
+        sql: "SELECT SUM(volume) as total FROM blast_inventory WHERE LOWER(TRIM(product)) = LOWER(TRIM(?))",
         args: [item.product.trim()],
       });
-      const remainingTotal = afterSum.rows[0]?.total || 0;
+      const remainingTotal = Math.round(((afterSum.rows[0]?.total || 0) + Number.EPSILON) * 100) / 100;
 
       // Log movement history
+      const historyDetails = isForLayer
+        ? "Deducted when added to Product Queuing for Blast (Standalone For Layer)"
+        : "Deducted when added to Product Queuing for Blast";
+
       await db.execute({
         sql: `INSERT INTO blast_inventory_history (timestamp, type, product, production_date, volume, unit, remaining, shift, queue, details)
-              VALUES (?, 'DEDUCTION', ?, ?, ?, ?, ?, ?, ?, 'Deducted when added to Product Queuing for Blast')`,
+              VALUES (?, 'DEDUCTION', ?, ?, ?, ?, ?, ?, ?, ?)`,
         args: [
           now.toISOString(),
           item.product,
@@ -416,6 +449,7 @@ app.post("/api/queues", async (req, res) => {
           remainingTotal,
           queueShift || "",
           newQueueNum,
+          historyDetails,
         ],
       });
     }

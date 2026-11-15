@@ -295,12 +295,22 @@ function renderBlastInventory() {
   if (empty) empty.style.display = "none";
   tbody.innerHTML = inventoryList
     .map(
-      (r) => `
+      (r) => {
+        const vol = parseFloat(r.volume || 0);
+        const isNeg = vol < 0;
+        const volColor = isNeg ? "#dc2626" : "#15803d";
+        const volFormatted = Number(vol).toLocaleString(undefined, { maximumFractionDigits: 2 });
+        const negBadge = isNeg
+          ? `<span class="badge" style="background:#fee2e2;color:#b91c1c;font-size:10.5px;padding:2px 7px;margin-left:6px;border:1px solid #fca5a5;">NEGATIVE STOCK</span>`
+          : "";
+        return `
     <tr>
       <td style="font-weight:700;">${escapeHTML(r.production_date || r.date || "—")}</td>
       <td style="white-space:nowrap;color:#64748b;">${escapeHTML(new Date(r.created_at).toLocaleString())}</td>
       <td style="font-weight:800;color:#0f172a;">${escapeHTML(r.product)}</td>
-      <td style="font-weight:800;color:#15803d;">${Number(r.volume).toLocaleString(undefined, { maximumFractionDigits: 2 })} ${escapeHTML(formatUnit(r.unit))}</td>
+      <td style="font-weight:800;color:${volColor};">
+        ${volFormatted} ${escapeHTML(formatUnit(r.unit))}${negBadge}
+      </td>
       <td><span class="badge" style="background:#f1f5f9;color:#334155;">${escapeHTML(r.category || "Uncategorized")}</span></td>
       <td>
         <button type="button" class="btn-outline" style="color:#dc2626;padding:5px 10px;" onclick="deleteInventoryItem(${r.id})">
@@ -308,7 +318,8 @@ function renderBlastInventory() {
         </button>
       </td>
     </tr>
-  `
+  `;
+      }
     )
     .join("");
 
@@ -327,12 +338,20 @@ function renderBlastInventory() {
       </div>` +
       Object.entries(totals)
         .map(
-          ([unit, total]) => `
-        <div style="background:#f0fdf4;padding:12px 18px;border-radius:10px;border:1px solid #bbf7d0;">
-          <strong style="font-size:18px;color:#15803d;">${total.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${escapeHTML(formatUnit(unit))}</strong><br>
-          <span style="font-size:12px;color:#16a34a;font-weight:700;">Total Available</span>
+          ([unit, total]) => {
+            const isNeg = total < 0;
+            const bg = isNeg ? "#fef2f2" : "#f0fdf4";
+            const border = isNeg ? "#fecaca" : "#bbf7d0";
+            const textCol = isNeg ? "#dc2626" : "#15803d";
+            const subCol = isNeg ? "#b91c1c" : "#16a34a";
+            const label = isNeg ? "Total Deficit (Negative)" : "Total Available";
+            return `
+        <div style="background:${bg};padding:12px 18px;border-radius:10px;border:1px solid ${border};">
+          <strong style="font-size:18px;color:${textCol};">${total.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${escapeHTML(formatUnit(unit))}</strong><br>
+          <span style="font-size:12px;color:${subCol};font-weight:700;">${label}</span>
         </div>
-      `
+      `;
+          }
         )
         .join("");
   }
@@ -375,22 +394,28 @@ function renderCategoryInventoryBoard() {
       );
       const catTotal = items.reduce((acc, it) => acc + it.volume, 0);
       const unit = formatUnit(items[0]?.unit || "kg");
+      const isCatNeg = catTotal < 0;
+      const catTotalColor = isCatNeg ? "#dc2626" : "#9a3412";
 
       return `
-      <div style="background:#fff;border:1px solid #fed7aa;border-radius:10px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+      <div style="background:#fff;border:1px solid ${isCatNeg ? '#fecaca' : '#fed7aa'};border-radius:10px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-          <div style="font-size:14px;font-weight:900;color:#c2410c;letter-spacing:0.5px;">${escapeHTML(cat).toUpperCase()}</div>
-          <span style="font-size:12px;font-weight:800;color:#9a3412;">${catTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${escapeHTML(unit)}</span>
+          <div style="font-size:14px;font-weight:900;color:${isCatNeg ? '#dc2626' : '#c2410c'};letter-spacing:0.5px;">${escapeHTML(cat).toUpperCase()}</div>
+          <span style="font-size:12px;font-weight:800;color:${catTotalColor};">${catTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${escapeHTML(unit)}${isCatNeg ? ' (Deficit)' : ''}</span>
         </div>
-        <div style="font-size:12px;border-top:1px dashed #fed7aa;padding-top:8px;">
+        <div style="font-size:12px;border-top:1px dashed ${isCatNeg ? '#fca5a5' : '#fed7aa'};padding-top:8px;">
           ${items
             .map(
-              (it) => `
+              (it) => {
+                const isNeg = it.volume < 0;
+                const itColor = isNeg ? "#dc2626" : "#15803d";
+                return `
             <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #fff7ed;">
               <span style="font-weight:700;">${escapeHTML(it.product)} <small style="color:#64748b;">(${escapeHTML(it.productionDate)})</small></span>
-              <span style="font-weight:800;color:#15803d;">${it.volume.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${escapeHTML(formatUnit(it.unit))}</span>
+              <span style="font-weight:800;color:${itColor};">${it.volume.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${escapeHTML(formatUnit(it.unit))}${isNeg ? ' ⚠' : ''}</span>
             </div>
-          `
+          `;
+              }
             )
             .join("")}
         </div>
@@ -526,6 +551,8 @@ function checkProductProductionDate(row) {
     return false;
   }
 
+  const isForLayer = document.getElementById("forLayer")?.value === "Yes";
+
   const matching = inventoryList.filter(
     (st) =>
       normProd(st.product) === normProd(pName) &&
@@ -535,6 +562,13 @@ function checkProductProductionDate(row) {
   const available = matching.reduce((sum, st) => sum + parseFloat(st.volume || 0), 0);
 
   if (matching.length === 0 || available <= 0) {
+    if (isForLayer) {
+      msg.innerHTML = `⚡ <strong>Standalone For Layer:</strong> Walang stock sa inventory. Magiging <u>negative stock</u> ito pagka-queue.`;
+      msg.style.color = "#c2410c";
+      dateInput.setCustomValidity("");
+      return true;
+    }
+
     const otherDates = [
       ...new Set(
         inventoryList
@@ -548,7 +582,7 @@ function checkProductProductionDate(row) {
     return false;
   }
 
-  msg.textContent = `✓ Available in Blast Inventory: ${available.toLocaleString()} ${matching[0].unit || "kg"}`;
+  msg.textContent = `✓ Available in Blast Inventory: ${available.toLocaleString()} ${matching[0].unit || "kg"}${isForLayer ? " (For Layer)" : ""}`;
   msg.style.color = "#15803d";
   dateInput.setCustomValidity("");
   return true;
@@ -1792,28 +1826,30 @@ document.addEventListener("DOMContentLoaded", () => {
         };
       });
 
-      // Validate stock availability
-      for (const p of products) {
-        const matching = inventoryList.filter(
-          (st) =>
-            normProd(st.product) === normProd(p.product) &&
-            normDateStr(st.production_date) === normDateStr(p.productionDate) &&
-            parseFloat(st.volume) > 0
-        );
-        const avail = matching.reduce((sum, st) => sum + parseFloat(st.volume || 0), 0);
-        const reqAmount = parseFloat(p.volume.replace(/[^0-9.]/g, "")) || 0;
-
-        if (matching.length === 0 || avail < reqAmount) {
-          showToast(
-            `Insufficient inventory for ${p.product} (Production Date: ${p.productionDate}). Available: ${avail}, Requested: ${reqAmount}`,
-            "error"
+      // Validate stock availability (bypassed if Standalone For Layer mode)
+      if (!isForLayer) {
+        for (const p of products) {
+          const matching = inventoryList.filter(
+            (st) =>
+              normProd(st.product) === normProd(p.product) &&
+              normDateStr(st.production_date) === normDateStr(p.productionDate) &&
+              parseFloat(st.volume) > 0
           );
-          if (submitBtn) {
-            submitBtn.disabled = false;
-            submitBtn.innerHTML = origBtnText;
+          const avail = matching.reduce((sum, st) => sum + parseFloat(st.volume || 0), 0);
+          const reqAmount = parseFloat(p.volume.replace(/[^0-9.]/g, "")) || 0;
+
+          if (matching.length === 0 || avail < reqAmount) {
+            showToast(
+              `Insufficient inventory for ${p.product} (Production Date: ${p.productionDate}). Available: ${avail}, Requested: ${reqAmount}`,
+              "error"
+            );
+            if (submitBtn) {
+              submitBtn.disabled = false;
+              submitBtn.innerHTML = origBtnText;
+            }
+            isSubmittingReg = false;
+            return;
           }
-          isSubmittingReg = false;
-          return;
         }
       }
 
@@ -1898,6 +1934,23 @@ document.addEventListener("DOMContentLoaded", () => {
         checkProductProductionDate(e.target.closest(".product-entry"));
       }
     });
+  }
+
+  // Standalone For Layer toggle listener
+  const forLayerSelect = document.getElementById("forLayer");
+  const forLayerHint = document.getElementById("forLayerHint");
+  if (forLayerSelect) {
+    const handleForLayerToggle = () => {
+      const isLayer = forLayerSelect.value === "Yes";
+      if (forLayerHint) {
+        forLayerHint.style.display = isLayer ? "block" : "none";
+      }
+      document.querySelectorAll("#productEntries .product-entry").forEach((row) => {
+        checkProductProductionDate(row);
+      });
+    };
+    forLayerSelect.addEventListener("change", handleForLayerToggle);
+    handleForLayerToggle();
   }
 
   // Load initial data
