@@ -718,7 +718,7 @@ app.patch("/api/queues/:id/status", async (req, res) => {
 app.post("/api/queues/:id/allocate", async (req, res) => {
   try {
     const { id } = req.params;
-    const { blast, picks } = req.body; // picks: array of { index, volume }
+    const { blast, picks, referenceNumber } = req.body; // picks: array of { index, volume }
 
     // 1. Debounce rapid duplicate allocation clicks on the same queue (within 2.5 seconds)
     const allocLockKey = `alloc_${id}`;
@@ -821,19 +821,21 @@ app.post("/api/queues/:id/allocate", async (req, res) => {
       ? childProducts[0].productionDate
       : childProducts.map((p) => `${p.product}: ${p.productionDate}`).join("; ");
 
+    const cleanRef = referenceNumber && String(referenceNumber).trim() ? String(referenceNumber).trim().toUpperCase() : null;
+
     // Create child record
     await db.execute({
       sql: `INSERT INTO blast_queues (
         id, queue, parent_queue, parent_id, date, queue_date, queue_shift, date_shift,
         product, volume, product_temperature, production_date, recorder_checker,
         priority, is_for_layer, arrival, arrival_timestamp, status, assigned_blast,
-        blast_queue_time, queue_started, queue_started_at, split_count, products_json,
+        blast_queue_time, queue_started, queue_started_at, split_count, reference_number, products_json,
         blast_activities_json, temp_readings_json, created_at
       ) VALUES (
         ?, ?, ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?,
         ?, ?, ?, ?, 'Called', ?,
-        ?, 1, ?, 0, ?,
+        ?, 1, ?, 0, ?, ?,
         ?, '[]', ?
       )`,
       args: [
@@ -857,6 +859,7 @@ app.post("/api/queues/:id/allocate", async (req, res) => {
         blast,
         now.toISOString(),
         now.toISOString(),
+        cleanRef,
         JSON.stringify(childProducts),
         parent.blast_activities_json || "[]",
         now.toISOString(),

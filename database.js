@@ -133,12 +133,18 @@ export async function initDatabase() {
         queue_started INTEGER DEFAULT 1,
         queue_started_at TEXT,
         split_count INTEGER DEFAULT 0,
+        reference_number TEXT,
         products_json TEXT,
         blast_activities_json TEXT,
         temp_readings_json TEXT,
         created_at TEXT NOT NULL
       );
     `);
+
+    // Safely add reference_number column if it doesn't exist yet on existing blast_queues table
+    try {
+      await db.execute("ALTER TABLE blast_queues ADD COLUMN reference_number TEXT");
+    } catch (e) {}
 
     // 4. System Settings & Daily Sequence
     await db.execute(`

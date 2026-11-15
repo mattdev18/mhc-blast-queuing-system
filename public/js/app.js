@@ -617,11 +617,16 @@ function checkProductProductionDate(row) {
 // QUEUE DASHBOARD & ACTIONS
 // =============================================================================
 // State persistence for Blast assignment dropdowns & volume inputs to prevent background polling reset
-const allocDraftState = {}; // { [truckId]: { blast: string, volumes: { [origIdx]: number|string } } }
+const allocDraftState = {}; // { [truckId]: { blast: string, referenceNumber: string, volumes: { [origIdx]: number|string } } }
 
 function updateAllocBlast(truckId, value) {
   if (!allocDraftState[truckId]) allocDraftState[truckId] = {};
   allocDraftState[truckId].blast = value;
+}
+
+function updateAllocRef(truckId, value) {
+  if (!allocDraftState[truckId]) allocDraftState[truckId] = {};
+  allocDraftState[truckId].referenceNumber = value;
 }
 
 function updateAllocVol(truckId, origIdx, value) {
@@ -635,6 +640,11 @@ function saveAllActiveAllocInputs() {
     const truckId = sel.id.replace("blastSel_", "");
     if (!allocDraftState[truckId]) allocDraftState[truckId] = {};
     allocDraftState[truckId].blast = sel.value;
+  });
+  document.querySelectorAll("[id^='allocRef_']").forEach((inp) => {
+    const truckId = inp.id.replace("allocRef_", "");
+    if (!allocDraftState[truckId]) allocDraftState[truckId] = {};
+    allocDraftState[truckId].referenceNumber = inp.value;
   });
   document.querySelectorAll("[id^='alloc_']").forEach((inp) => {
     const lastUnderscore = inp.id.lastIndexOf("_");
@@ -662,7 +672,8 @@ function renderQueue() {
       (t) =>
         (t.assigned_blast || "").toLowerCase().includes(search) ||
         (t.product || "").toLowerCase().includes(search) ||
-        (t.queue || "").toLowerCase().includes(search)
+        (t.queue || "").toLowerCase().includes(search) ||
+        (t.reference_number || "").toLowerCase().includes(search)
     );
   }
 
@@ -705,7 +716,10 @@ function renderQueue() {
 
       return `
       <tr>
-        <td><strong style="font-size:14px;color:#0f172a;">${escapeHTML(truck.queue)}</strong></td>
+        <td>
+          <strong style="font-size:14px;color:#0f172a;">${escapeHTML(truck.queue)}</strong>
+          ${truck.reference_number ? `<br><span style="display:inline-block;margin-top:2px;font-size:10.5px;font-weight:700;color:#0284c7;background:#e0f2fe;padding:1px 6px;border-radius:4px;border:1px solid #bae6fd;">Ref: ${escapeHTML(truck.reference_number)}</span>` : ""}
+        </td>
         <td><strong>${escapeHTML(truck.queue_date || truck.date)}</strong></td>
         <td><strong>${escapeHTML(truck.queue_shift || "—")}</strong></td>
         <td>${escapeHTML(truck.product || "—")}</td>
@@ -802,6 +816,16 @@ function renderAllocPanel(truck) {
           `;
         })
         .join("")}
+      <div style="margin-top:6px;margin-bottom:6px;">
+        <label style="font-size:10.5px;font-weight:700;color:#475569;text-transform:uppercase;margin-bottom:2px;display:block;">
+          Reference No. (Pallet / Lot / DR #)
+        </label>
+        <input type="text" id="allocRef_${truck.id}"
+          value="${escapeHTML(draft.referenceNumber || '')}"
+          oninput="updateAllocRef('${truck.id}', this.value)"
+          placeholder="e.g. REF-001, PLT-04, LOT-89"
+          style="padding:4px 8px;font-size:11.5px;width:100%;text-transform:uppercase;border:1px solid #cbd5e1;border-radius:5px;box-sizing:border-box;">
+      </div>
       <div style="display:flex;gap:6px;align-items:center;margin-top:6px;">
         <select id="blastSel_${truck.id}" onchange="updateAllocBlast('${truck.id}', this.value)" style="padding:4px 8px;font-size:12px;max-width:110px;">
           ${["Blast 1", "Blast 2", "Blast 3", "Blast 4"]
@@ -864,10 +888,13 @@ async function allocateQueueBatch(id) {
       return;
     }
 
+    const refInput = document.getElementById(`allocRef_${id}`);
+    const referenceNumber = (refInput ? refInput.value : draft.referenceNumber || "").trim().toUpperCase();
+
     const res = await fetch(`/api/queues/${id}/allocate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ blast, picks }),
+      body: JSON.stringify({ blast, picks, referenceNumber }),
     });
 
     if (res.ok) {
@@ -1204,7 +1231,7 @@ function renderLiveBlastBoard() {
 
                   return `
             <div class="tv-item">
-              <strong>${escapeHTML(t.queue)}</strong>
+              <strong>${escapeHTML(t.queue)} ${t.reference_number ? `<span style="font-size:12px;color:#38bdf8;font-weight:700;">(Ref: ${escapeHTML(t.reference_number)})</span>` : ""}</strong>
               <div>
                 <div style="font-size:16px;font-weight:900;color:#f8fafc;">${escapeHTML(t.product)}</div>
                 <small>${escapeHTML(t.volume || "—")} · Initial: ${escapeHTML(t.product_temperature || "—")} · ${escapeHTML(t.priority || "FSI")}</small>
@@ -1349,7 +1376,8 @@ function openBlastActivityModal(id) {
   const truck = queueList.find((t) => t.id === id);
   if (!truck) return;
 
-  document.getElementById("modalQueueHeader").textContent = `Queue ${truck.queue} · ${truck.product} · ${truck.assigned_blast || "Not assigned"}`;
+  const refPart = truck.reference_number ? ` · Ref: ${truck.reference_number}` : "";
+  document.getElementById("modalQueueHeader").textContent = `Queue ${truck.queue}${refPart} · ${truck.product} · ${truck.assigned_blast || "Not assigned"}`;
   const acts = truck.blastActivities || [];
 
   const tbody = document.getElementById("blastActivityRows");
@@ -1421,6 +1449,7 @@ function printQueueTicket(id) {
   document.getElementById("printDetails").innerHTML = `
     <strong>Date:</strong> ${escapeHTML(truck.queue_date || truck.date)}<br>
     <strong>Shift:</strong> ${escapeHTML(truck.queue_shift || "—")}<br>
+    ${truck.reference_number ? `<strong>Reference No.:</strong> ${escapeHTML(truck.reference_number)}<br>` : ""}
     <strong>Product:</strong> ${escapeHTML(truck.product)}<br>
     <strong>Volume:</strong> ${escapeHTML(truck.volume)}<br>
     <strong>Initial Temp:</strong> ${escapeHTML(truck.product_temperature || "—")}<br>
@@ -1450,6 +1479,7 @@ function exportQueueCSV() {
   const exportTimestampStr = formatDownloadDateTime(now);
   const headers = [
     "Queue Number",
+    "Reference Number",
     "Registration Date",
     "Queue Date",
     "Shift",
@@ -1472,6 +1502,7 @@ function exportQueueCSV() {
 
   const rows = queueList.map((t) => [
     t.queue,
+    t.reference_number || "—",
     t.date,
     t.queue_date,
     t.queue_shift,
