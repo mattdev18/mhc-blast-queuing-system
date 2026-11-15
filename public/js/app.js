@@ -199,6 +199,8 @@ async function fetchInventory() {
     if (res.ok) {
       inventoryList = await res.json();
       renderBlastInventory();
+      renderQueueInventoryReference();
+      updateInventoryProductDatalist();
     }
   } catch (err) {
     console.error("fetchInventory error:", err);
@@ -211,6 +213,7 @@ async function fetchHistory() {
     if (res.ok) {
       historyList = await res.json();
       renderBlastHistory();
+      updateInventoryProductDatalist();
     }
   } catch (err) {
     console.error("fetchHistory error:", err);
@@ -272,6 +275,9 @@ function showScreen(screenId, btn) {
     renderQueue();
     updateStats();
     renderTempPanel();
+  } else if (screenId === "registration") {
+    renderQueueInventoryReference();
+    updateInventoryProductDatalist();
   } else if (screenId === "liveBoard") {
     renderLiveBlastBoard();
   } else if (screenId === "reports") {
@@ -525,7 +531,7 @@ function addProductEntryRow() {
   div.innerHTML = `
     <div class="form-group">
       <label>Product *</label>
-      <input class="product-name" type="text" placeholder="e.g. HJAC, CCM, MDS" required autocomplete="off">
+      <input class="product-name" type="text" list="inventoryProductDatalist" placeholder="e.g. HJAC, CCM, MDS" required autocomplete="off">
     </div>
     <div class="form-group">
       <label>Volume *</label>
@@ -553,6 +559,155 @@ function updateProductRemoveButtons() {
     const btn = r.querySelector(".remove-product-btn");
     if (btn) btn.style.display = rows.length > 1 ? "inline-flex" : "none";
   });
+}
+
+// Datalist of distinct products from current inventory & movement history for instant typing suggestions
+function updateInventoryProductDatalist() {
+  const dl = document.getElementById("inventoryProductDatalist");
+  if (!dl) return;
+  const productsSet = new Set();
+  (inventoryList || []).forEach((item) => {
+    if (item.product && String(item.product).trim()) {
+      productsSet.add(String(item.product).trim());
+    }
+  });
+  (historyList || []).forEach((item) => {
+    if (item.product && String(item.product).trim()) {
+      productsSet.add(String(item.product).trim());
+    }
+  });
+  const sortedProds = Array.from(productsSet).sort((a, b) => a.localeCompare(b));
+  dl.innerHTML = sortedProds.map((p) => `<option value="${escapeHTML(p)}"></option>`).join("");
+}
+
+// Copy of Inventory Reference on Tab 2 (Product Queuing for Blast)
+function renderQueueInventoryReference() {
+  const tbody = document.getElementById("queueInventoryRows");
+  const empty = document.getElementById("queueInventoryEmpty");
+  const sumBox = document.getElementById("queueInventorySummary");
+  const searchInput = document.getElementById("queueInventorySearch");
+  const search = searchInput ? searchInput.value.toLowerCase().trim() : "";
+  if (!tbody) return;
+
+  if (inventoryList.length === 0) {
+    tbody.innerHTML = "";
+    if (empty) empty.style.display = "block";
+    if (sumBox) sumBox.innerHTML = "";
+    return;
+  }
+
+  let list = [...inventoryList];
+  if (search) {
+    list = list.filter(
+      (r) =>
+        (r.product || "").toLowerCase().includes(search) ||
+        (r.production_date || "").toLowerCase().includes(search) ||
+        (r.category || "").toLowerCase().includes(search)
+    );
+  }
+
+  if (list.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:18px;color:#64748b;">Walang tugmang produkto sa inventory.</td></tr>`;
+    if (empty) empty.style.display = "none";
+    return;
+  }
+
+  if (empty) empty.style.display = "none";
+  tbody.innerHTML = list
+    .map((r) => {
+      const vol = parseFloat(r.volume || 0);
+      const isNeg = vol < 0;
+      const volColor = isNeg ? "#dc2626" : "#15803d";
+      const volFormatted = Number(vol).toLocaleString(undefined, { maximumFractionDigits: 2 });
+      const negBadge = isNeg
+        ? `<span class="badge" style="background:#fee2e2;color:#b91c1c;font-size:10.5px;padding:2px 7px;margin-left:6px;border:1px solid #fca5a5;">NEGATIVE STOCK</span>`
+        : "";
+      const equivKilos = parseFloat(r.equivalent_kilos || 0);
+      const isPacks = String(r.unit || "").toLowerCase() === "packs";
+      const equivHtml = isPacks && equivKilos !== 0
+        ? `<br><small style="color:#0284c7;font-weight:700;">Equiv: ${Number(equivKilos).toLocaleString(undefined, { maximumFractionDigits: 2 })} kg</small>`
+        : "";
+
+      const prodParam = (r.product || "").replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+      const dateParam = (r.production_date || r.date || "").replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+
+      return `
+        <tr>
+          <td style="font-weight:700;">${escapeHTML(r.production_date || r.date || "—")}</td>
+          <td style="font-weight:800;color:#0f172a;">${escapeHTML(r.product)}</td>
+          <td style="font-weight:800;color:${volColor};">
+            ${volFormatted} ${escapeHTML(formatUnit(r.unit))}${negBadge}${equivHtml}
+          </td>
+          <td><span class="badge" style="background:#f1f5f9;color:#334155;">${escapeHTML(r.category || "Uncategorized")}</span></td>
+          <td style="text-align:center;">
+            <button type="button" class="btn-primary" style="padding:4px 10px;font-size:11.5px;" onclick="fillProductToQueue('${prodParam}', '${dateParam}')">
+              ➕ Gamitin sa Queue
+            </button>
+          </td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  // Summary badges for quick reference
+  const totals = {};
+  inventoryList.forEach((r) => {
+    const u = formatUnit(r.unit || "kg");
+    totals[u] = (totals[u] || 0) + parseFloat(r.volume || 0);
+  });
+
+  if (sumBox) {
+    sumBox.innerHTML =
+      `<div style="background:#eff6ff;padding:6px 12px;border-radius:8px;border:1px solid #bfdbfe;display:flex;align-items:center;gap:6px;">
+        <span style="font-size:11px;color:#3b82f6;font-weight:700;">Lots:</span>
+        <strong style="font-size:13px;color:#1e40af;">${inventoryList.length}</strong>
+      </div>` +
+      Object.entries(totals)
+        .map(([unit, total]) => {
+          const isNeg = total < 0;
+          const bg = isNeg ? "#fef2f2" : "#f0fdf4";
+          const border = isNeg ? "#fecaca" : "#bbf7d0";
+          const textCol = isNeg ? "#dc2626" : "#15803d";
+          return `
+            <div style="background:${bg};padding:6px 12px;border-radius:8px;border:1px solid ${border};display:flex;align-items:center;gap:6px;">
+              <span style="font-size:11px;color:#64748b;font-weight:700;">${escapeHTML(formatUnit(unit))}:</span>
+              <strong style="font-size:13px;color:${textCol};">${total.toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong>
+            </div>
+          `;
+        })
+        .join("");
+  }
+}
+
+// Quick action to auto-fill product and production date into the queuing form
+function fillProductToQueue(productName, productionDate) {
+  const entries = document.querySelectorAll("#productEntries .product-entry");
+  let targetEntry = null;
+  for (const entry of entries) {
+    const pInput = entry.querySelector(".product-name");
+    if (!pInput.value.trim()) {
+      targetEntry = entry;
+      break;
+    }
+  }
+
+  if (!targetEntry && entries.length > 0) {
+    addProductEntryRow();
+    const updatedEntries = document.querySelectorAll("#productEntries .product-entry");
+    targetEntry = updatedEntries[updatedEntries.length - 1];
+  } else if (!targetEntry) {
+    targetEntry = entries[0];
+  }
+
+  if (targetEntry) {
+    const pInput = targetEntry.querySelector(".product-name");
+    const dInput = targetEntry.querySelector(".product-production-date");
+    if (pInput) pInput.value = productName;
+    if (dInput && productionDate) dInput.value = productionDate;
+    checkProductProductionDate(targetEntry);
+    targetEntry.scrollIntoView({ behavior: "smooth", block: "center" });
+    showToast(`Na-fill sa form: ${productName} (${productionDate || "Walang petsa"})`);
+  }
 }
 
 function checkProductProductionDate(row) {
