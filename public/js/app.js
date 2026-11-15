@@ -818,12 +818,12 @@ function renderAllocPanel(truck) {
         .join("")}
       <div style="margin-top:6px;margin-bottom:6px;">
         <label style="font-size:10.5px;font-weight:700;color:#475569;text-transform:uppercase;margin-bottom:2px;display:block;">
-          Reference No. (Pallet / Lot / DR #)
+          Tally Sheet # o TRF #
         </label>
         <input type="text" id="allocRef_${truck.id}"
           value="${escapeHTML(draft.referenceNumber || '')}"
           oninput="updateAllocRef('${truck.id}', this.value)"
-          placeholder="e.g. REF-001, PLT-04, LOT-89"
+          placeholder="e.g. TS-001, TRF-102"
           style="padding:4px 8px;font-size:11.5px;width:100%;text-transform:uppercase;border:1px solid #cbd5e1;border-radius:5px;box-sizing:border-box;">
       </div>
       <div style="display:flex;gap:6px;align-items:center;margin-top:6px;">
@@ -1449,7 +1449,7 @@ function printQueueTicket(id) {
   document.getElementById("printDetails").innerHTML = `
     <strong>Date:</strong> ${escapeHTML(truck.queue_date || truck.date)}<br>
     <strong>Shift:</strong> ${escapeHTML(truck.queue_shift || "—")}<br>
-    ${truck.reference_number ? `<strong>Reference No.:</strong> ${escapeHTML(truck.reference_number)}<br>` : ""}
+    ${truck.reference_number ? `<strong>Tally Sheet / TRF #:</strong> ${escapeHTML(truck.reference_number)}<br>` : ""}
     <strong>Product:</strong> ${escapeHTML(truck.product)}<br>
     <strong>Volume:</strong> ${escapeHTML(truck.volume)}<br>
     <strong>Initial Temp:</strong> ${escapeHTML(truck.product_temperature || "—")}<br>
@@ -1479,7 +1479,7 @@ function exportQueueCSV() {
   const exportTimestampStr = formatDownloadDateTime(now);
   const headers = [
     "Queue Number",
-    "Reference Number",
+    "Tally Sheet / TRF #",
     "Registration Date",
     "Queue Date",
     "Shift",
