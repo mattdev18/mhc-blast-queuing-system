@@ -523,29 +523,56 @@ async function resetBlastInventory() {
 // =============================================================================
 // PRODUCT QUEUING REGISTRATION
 // =============================================================================
+function toggleProductUnitRow(selectEl) {
+  const row = selectEl.closest(".product-entry");
+  if (!row) return;
+  const isPacks = selectEl.value === "packs";
+  const volLabel = row.querySelector(".product-volume-label");
+  const volInput = row.querySelector(".product-volume");
+  const equivGroup = row.querySelector(".product-equiv-group");
+  const equivInput = row.querySelector(".product-equiv-kilos");
+
+  if (volLabel) volLabel.textContent = isPacks ? "No. of Packs *" : "Volume (kg) *";
+  if (volInput) volInput.placeholder = isPacks ? "e.g. 500" : "e.g. 5000";
+
+  if (equivGroup) equivGroup.style.display = isPacks ? "block" : "none";
+  if (equivInput) equivInput.required = isPacks;
+}
+
 function addProductEntryRow() {
   const container = document.getElementById("productEntries");
   if (!container) return;
   const div = document.createElement("div");
   div.className = "product-entry";
   div.innerHTML = `
-    <div class="form-group">
+    <div class="form-group" style="flex:2 1 180px;">
       <label>Product *</label>
-      <input class="product-name" type="text" list="inventoryProductDatalist" placeholder="e.g. HJAC, CCM, MDS" required autocomplete="off">
+      <input class="product-name" type="text" list="inventoryProductDatalist" placeholder="e.g. HJAC, CCM, MDS" required autocomplete="off" oninput="checkProductProductionDate(this.closest('.product-entry'))">
     </div>
-    <div class="form-group">
-      <label>Volume *</label>
-      <input class="product-volume" type="text" placeholder="e.g. 5,000 kg" required autocomplete="off">
+    <div class="form-group" style="flex:1 1 120px;">
+      <label>Unit of Measure *</label>
+      <select class="product-unit" onchange="toggleProductUnitRow(this); checkProductProductionDate(this.closest('.product-entry'))" required>
+        <option value="kg">Kilograms (kg)</option>
+        <option value="packs">Packs</option>
+      </select>
     </div>
-    <div class="form-group">
+    <div class="form-group" style="flex:1.2 1 130px;">
+      <label class="product-volume-label">Volume (kg) *</label>
+      <input class="product-volume" type="number" min="0.01" step="0.01" placeholder="e.g. 5000" required autocomplete="off" oninput="checkProductProductionDate(this.closest('.product-entry'))">
+    </div>
+    <div class="form-group product-equiv-group" style="flex:1.2 1 130px;display:none;">
+      <label>Equiv Kilos (kg) *</label>
+      <input class="product-equiv-kilos" type="number" min="0.01" step="0.01" placeholder="e.g. 1000" autocomplete="off" oninput="checkProductProductionDate(this.closest('.product-entry'))">
+    </div>
+    <div class="form-group" style="flex:1 1 110px;">
       <label>Product Temp (°C) *</label>
       <input class="product-temperature" type="number" step="0.1" placeholder="4.0" required>
     </div>
-    <div class="form-group">
+    <div class="form-group" style="flex:1.2 1 140px;">
       <label>Production Date *</label>
-      <input class="product-production-date" type="date" required>
+      <input class="product-production-date" type="date" required onchange="checkProductProductionDate(this.closest('.product-entry'))">
     </div>
-    <button class="btn-outline remove-product-btn" type="button" onclick="this.closest('.product-entry').remove(); updateProductRemoveButtons();" style="height:42px;color:#dc2626;">
+    <button class="btn-outline remove-product-btn" type="button" onclick="this.closest('.product-entry').remove(); updateProductRemoveButtons();" style="height:42px;color:#dc2626;flex:0 0 auto;">
       Remove
     </button>
   `;
@@ -630,6 +657,9 @@ function renderQueueInventoryReference() {
 
       const prodParam = (r.product || "").replace(/\\/g, "\\\\").replace(/'/g, "\\'");
       const dateParam = (r.production_date || r.date || "").replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+      const uParam = (r.unit || "kg").replace(/'/g, "\\'");
+      const volParam = parseFloat(r.volume || 0);
+      const eqParam = parseFloat(r.equivalent_kilos || 0);
 
       return `
         <tr>
@@ -640,7 +670,7 @@ function renderQueueInventoryReference() {
           </td>
           <td><span class="badge" style="background:#f1f5f9;color:#334155;">${escapeHTML(r.category || "Uncategorized")}</span></td>
           <td style="text-align:center;">
-            <button type="button" class="btn-primary" style="padding:4px 10px;font-size:11.5px;" onclick="fillProductToQueue('${prodParam}', '${dateParam}')">
+            <button type="button" class="btn-primary" style="padding:4px 10px;font-size:11.5px;" onclick="fillProductToQueue('${prodParam}', '${dateParam}', '${uParam}', ${volParam}, ${eqParam})">
               ➕ Use in Queue
             </button>
           </td>
@@ -680,7 +710,7 @@ function renderQueueInventoryReference() {
 }
 
 // Quick action to auto-fill product and production date into the queuing form
-function fillProductToQueue(productName, productionDate) {
+function fillProductToQueue(productName, productionDate, unit, volume, equivKilos) {
   const entries = document.querySelectorAll("#productEntries .product-entry");
   let targetEntry = null;
   for (const entry of entries) {
@@ -702,11 +732,26 @@ function fillProductToQueue(productName, productionDate) {
   if (targetEntry) {
     const pInput = targetEntry.querySelector(".product-name");
     const dInput = targetEntry.querySelector(".product-production-date");
+    const uSelect = targetEntry.querySelector(".product-unit");
+    const vInput = targetEntry.querySelector(".product-volume");
+    const eqInput = targetEntry.querySelector(".product-equiv-kilos");
+
     if (pInput) pInput.value = productName;
     if (dInput && productionDate) dInput.value = productionDate;
+    if (uSelect && unit) {
+      uSelect.value = String(unit).toLowerCase() === "packs" ? "packs" : "kg";
+      toggleProductUnitRow(uSelect);
+    }
+    if (vInput && volume && parseFloat(volume) > 0) {
+      vInput.value = parseFloat(volume);
+    }
+    if (eqInput && equivKilos && parseFloat(equivKilos) > 0) {
+      eqInput.value = parseFloat(equivKilos);
+    }
+
     checkProductProductionDate(targetEntry);
     targetEntry.scrollIntoView({ behavior: "smooth", block: "center" });
-    showToast(`Filled in form: ${productName} (${productionDate || "No date"})`);
+    showToast(`Filled in form: ${productName} (${unit || "kg"})`);
   }
 }
 
@@ -714,15 +759,19 @@ function checkProductProductionDate(row) {
   if (!row) return false;
   const prodInput = row.querySelector(".product-name");
   const dateInput = row.querySelector(".product-production-date");
+  const unitSelect = row.querySelector(".product-unit");
   if (!prodInput || !dateInput) return false;
 
   const pName = prodInput.value.trim();
   const pDate = dateInput.value;
+  const pUnit = (unitSelect?.value || "kg").toLowerCase();
+  const isPacks = pUnit === "packs";
+
   let msg = row.querySelector(".production-date-message");
   if (!msg) {
     msg = document.createElement("small");
     msg.className = "production-date-message";
-    msg.style.cssText = "display:block;margin-top:4px;font-weight:700;";
+    msg.style.cssText = "display:block;margin-top:4px;font-weight:700;width:100%;";
     dateInput.insertAdjacentElement("afterend", msg);
   }
 
@@ -737,9 +786,11 @@ function checkProductProductionDate(row) {
     (st) =>
       normProd(st.product) === normProd(pName) &&
       normDateStr(st.production_date) === normDateStr(pDate) &&
+      (st.unit || "kg").toLowerCase() === pUnit &&
       parseFloat(st.volume) > 0
   );
   const available = matching.reduce((sum, st) => sum + parseFloat(st.volume || 0), 0);
+  const availableEquiv = matching.reduce((sum, st) => sum + parseFloat(st.equivalent_kilos || 0), 0);
 
   if (matching.length === 0 || available <= 0) {
     if (isForLayer) {
@@ -749,20 +800,18 @@ function checkProductProductionDate(row) {
       return true;
     }
 
-    const otherDates = [
-      ...new Set(
-        inventoryList
-          .filter((st) => normProd(st.product) === normProd(pName) && parseFloat(st.volume) > 0)
-          .map((st) => st.production_date)
-      ),
-    ];
-    msg.textContent = `⚠ No stock for this date. Available dates for ${pName}: ${otherDates.join(", ") || "None"}`;
+    const otherMatches = inventoryList.filter(
+      (st) => normProd(st.product) === normProd(pName) && parseFloat(st.volume) > 0
+    );
+    const otherDates = [...new Set(otherMatches.map((st) => `${st.production_date} (${st.unit || "kg"})`))];
+    msg.textContent = `⚠ No stock for this date/unit. Available: ${otherDates.join(", ") || "None"}`;
     msg.style.color = "#dc2626";
-    dateInput.setCustomValidity("No available product for this Production Date.");
+    dateInput.setCustomValidity("No available product for this Production Date and Unit.");
     return false;
   }
 
-  msg.textContent = `✓ Available in Blast Inventory: ${available.toLocaleString()} ${matching[0].unit || "kg"}${isForLayer ? " (For Layer)" : ""}`;
+  const equivInfo = isPacks && availableEquiv > 0 ? ` (Equiv: ${availableEquiv.toLocaleString()} kg)` : "";
+  msg.textContent = `✓ Available in Blast Inventory: ${available.toLocaleString()} ${isPacks ? "packs" : "kg"}${equivInfo}${isForLayer ? " (For Layer)" : ""}`;
   msg.style.color = "#15803d";
   dateInput.setCustomValidity("");
   return true;
@@ -927,9 +976,13 @@ function volumeCellHTML(truck) {
     const isSingle = prods.length === 1;
     const remaining = prods
       .map((p) => {
-        const left = (p.amount || 0) - (p.allocated || 0);
+        const left = Math.max(0, Math.round(((p.amount || 0) - (p.allocated || 0)) * 100) / 100);
+        const isPacks = String(p.unit || "").toLowerCase() === "packs";
+        const leftEquiv = isPacks && p.amount > 0 && p.equivalentKilos
+          ? ` (Equiv: ${Math.round((left / p.amount) * p.equivalentKilos * 100) / 100} kg)`
+          : "";
         const u = formatUnit(p.unit || "kg");
-        return isSingle ? `${left} ${u}` : `${p.product}: ${left} ${u}`;
+        return isSingle ? `${left} ${u}${leftEquiv}` : `${p.product}: ${left} ${u}${leftEquiv}`;
       })
       .join("; ");
     return `${base}<br><small style="color:#b45309;font-weight:800;">Remaining: ${escapeHTML(remaining)}</small>`;
@@ -956,10 +1009,14 @@ function renderAllocPanel(truck) {
           const remaining = Math.max(0, Math.round(((p.amount || 0) - (p.allocated || 0)) * 100) / 100);
           const hasDraftVal = draft.volumes && draft.volumes[origIdx] !== undefined && draft.volumes[origIdx] !== "";
           const displayVal = hasDraftVal ? Math.min(remaining, parseFloat(draft.volumes[origIdx]) || 0) : remaining;
+          const isPacks = String(p.unit || "").toLowerCase() === "packs";
           const u = formatUnit(p.unit || "kg");
+          const equivRemaining = isPacks && p.amount > 0 && p.equivalentKilos
+            ? ` · ${Math.round((remaining / p.amount) * p.equivalentKilos * 100) / 100} kg equiv`
+            : "";
           return `
             <div style="margin-bottom:6px;">
-              <div style="font-size:11px;font-weight:700;">${escapeHTML(p.product)} <small style="color:#64748b;">(Left: ${remaining} ${escapeHTML(u)})</small></div>
+              <div style="font-size:11px;font-weight:700;">${escapeHTML(p.product)} <small style="color:#64748b;">(Left: ${remaining} ${escapeHTML(u)}${equivRemaining})</small></div>
               <div style="display:flex;gap:4px;align-items:center;">
                 <input type="number" id="alloc_${truck.id}_${origIdx}" min="0.01" max="${remaining}" step="any"
                   value="${displayVal}"
@@ -2043,18 +2100,41 @@ document.addEventListener("DOMContentLoaded", () => {
       const isForLayer = document.getElementById("forLayer").value === "Yes";
 
       const rows = Array.from(document.querySelectorAll("#productEntries .product-entry"));
-      const products = rows.map((r) => {
-        let vol = r.querySelector(".product-volume").value.trim().toUpperCase();
-        if (vol.toLowerCase().includes("cases")) {
-          vol = vol.replace(/cases/gi, "crates");
+      const products = [];
+
+      for (const r of rows) {
+        const pName = r.querySelector(".product-name").value.trim().toUpperCase();
+        const pUnit = (r.querySelector(".product-unit")?.value || "kg").toLowerCase();
+        const isPacks = pUnit === "packs";
+        const volVal = parseFloat(r.querySelector(".product-volume").value) || 0;
+        const equivVal = isPacks
+          ? (parseFloat(r.querySelector(".product-equiv-kilos")?.value) || 0)
+          : volVal;
+
+        if (isPacks && (!equivVal || equivVal <= 0)) {
+          showToast(`Please enter the Equivalent Kilos for packs of ${pName || "the product"}.`, "warning");
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = origBtnText;
+          }
+          isSubmittingReg = false;
+          return;
         }
-        return {
-          product: r.querySelector(".product-name").value.trim().toUpperCase(),
-          volume: vol,
+
+        const volDisplay = isPacks
+          ? `${volVal} packs (Equiv: ${equivVal} kg)`
+          : `${volVal} kg`;
+
+        products.push({
+          product: pName,
+          unit: pUnit,
+          volume: volDisplay,
+          amount: volVal,
+          equivalentKilos: equivVal,
           productTemperature: r.querySelector(".product-temperature").value,
           productionDate: r.querySelector(".product-production-date").value,
-        };
-      });
+        });
+      }
 
       // Validate stock availability (bypassed if Standalone For Layer mode)
       if (!isForLayer) {
@@ -2063,14 +2143,13 @@ document.addEventListener("DOMContentLoaded", () => {
             (st) =>
               normProd(st.product) === normProd(p.product) &&
               normDateStr(st.production_date) === normDateStr(p.productionDate) &&
+              (st.unit || "kg").toLowerCase() === p.unit &&
               parseFloat(st.volume) > 0
           );
           const avail = matching.reduce((sum, st) => sum + parseFloat(st.volume || 0), 0);
-          const reqAmount = parseFloat(p.volume.replace(/[^0-9.]/g, "")) || 0;
-
-          if (matching.length === 0 || avail < reqAmount) {
+          if (matching.length === 0 || avail < p.amount) {
             showToast(
-              `Insufficient inventory for ${p.product} (Production Date: ${p.productionDate}). Available: ${avail}, Requested: ${reqAmount}`,
+              `Insufficient inventory for ${p.product} (${p.productionDate}, ${p.unit}). Available: ${avail} ${p.unit}, Requested: ${p.amount} ${p.unit}`,
               "error"
             );
             if (submitBtn) {
@@ -2124,11 +2203,36 @@ document.addEventListener("DOMContentLoaded", () => {
           document.getElementById("queueDate").value = todayDateStr();
           document.getElementById("productEntries").innerHTML = `
             <div class="product-entry">
-              <div class="form-group"><label>Product *</label><input class="product-name" type="text" placeholder="e.g. HJAC, CCM, MDS" required autocomplete="off"></div>
-              <div class="form-group"><label>Volume *</label><input class="product-volume" type="text" placeholder="e.g. 5,000 kg" required autocomplete="off"></div>
-              <div class="form-group"><label>Product Temp (°C) *</label><input class="product-temperature" type="number" step="0.1" placeholder="4.0" required></div>
-              <div class="form-group"><label>Production Date *</label><input class="product-production-date" type="date" required></div>
-              <button class="btn-outline remove-product-btn" type="button" onclick="this.closest('.product-entry').remove(); updateProductRemoveButtons();" style="height:42px;display:none;color:#dc2626;">Remove</button>
+              <div class="form-group" style="flex:2 1 180px;">
+                <label>Product *</label>
+                <input class="product-name" type="text" list="inventoryProductDatalist" placeholder="e.g. HJAC, CCM, MDS" required autocomplete="off" oninput="checkProductProductionDate(this.closest('.product-entry'))">
+              </div>
+              <div class="form-group" style="flex:1 1 120px;">
+                <label>Unit of Measure *</label>
+                <select class="product-unit" onchange="toggleProductUnitRow(this); checkProductProductionDate(this.closest('.product-entry'))" required>
+                  <option value="kg">Kilograms (kg)</option>
+                  <option value="packs">Packs</option>
+                </select>
+              </div>
+              <div class="form-group" style="flex:1.2 1 130px;">
+                <label class="product-volume-label">Volume (kg) *</label>
+                <input class="product-volume" type="number" min="0.01" step="0.01" placeholder="e.g. 5000" required autocomplete="off" oninput="checkProductProductionDate(this.closest('.product-entry'))">
+              </div>
+              <div class="form-group product-equiv-group" style="flex:1.2 1 130px;display:none;">
+                <label>Equiv Kilos (kg) *</label>
+                <input class="product-equiv-kilos" type="number" min="0.01" step="0.01" placeholder="e.g. 1000" autocomplete="off" oninput="checkProductProductionDate(this.closest('.product-entry'))">
+              </div>
+              <div class="form-group" style="flex:1 1 110px;">
+                <label>Product Temp (°C) *</label>
+                <input class="product-temperature" type="number" step="0.1" placeholder="4.0" required>
+              </div>
+              <div class="form-group" style="flex:1.2 1 140px;">
+                <label>Production Date *</label>
+                <input class="product-production-date" type="date" required onchange="checkProductProductionDate(this.closest('.product-entry'))">
+              </div>
+              <button class="btn-outline remove-product-btn" type="button" onclick="this.closest('.product-entry').remove(); updateProductRemoveButtons();" style="height:42px;display:none;color:#dc2626;flex:0 0 auto;">
+                Remove
+              </button>
             </div>
           `;
 

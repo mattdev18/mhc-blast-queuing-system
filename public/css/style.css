@@ -849,10 +849,10 @@ button:disabled {
 }
 
 .product-entry {
-  display: grid;
-  grid-template-columns: 2fr 1.2fr 1fr 1.3fr auto;
+  display: flex;
+  flex-wrap: wrap;
   gap: 12px;
-  align-items: end;
+  align-items: flex-end;
   margin-bottom: 12px;
   padding: 14px;
   border: 1px solid #e2e8f0;

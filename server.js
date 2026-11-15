@@ -374,20 +374,30 @@ app.post("/api/queues", async (req, res) => {
     // Process & deduct from blast_inventory for each product
     for (const item of products) {
       item.product = (item.product || "").trim().toUpperCase();
-      const parsedAmount = parseFloat(String(item.volume || "0").replace(/[^0-9.]/g, "")) || 0;
-      let parsedUnit = (String(item.volume || "").match(/[a-zA-Z]+/g) || ["kg"])[0];
-      if (parsedUnit.toLowerCase() === "cases") parsedUnit = "crates";
+      let parsedUnit = (item.unit || "kg").toLowerCase();
+      if (parsedUnit === "cases") parsedUnit = "crates";
+      const isPacks = parsedUnit === "packs";
+
+      const parsedAmount = parseFloat(item.amount) || parseFloat(String(item.volume || "0").replace(/[^0-9.]/g, "")) || 0;
+      const numEquiv = isPacks 
+        ? (parseFloat(item.equivalentKilos) || parsedAmount)
+        : parsedAmount;
 
       item.amount = parsedAmount;
       item.unit = parsedUnit;
+      item.equivalentKilos = numEquiv;
       item.allocated = 0;
+      item.volume = isPacks
+        ? `${parsedAmount} packs (Equiv: ${numEquiv} kg)`
+        : `${parsedAmount} kg`;
 
-      // Find all inventory records for this product and production date
+      // Find all inventory records for this product, production date, and unit
       const allMatching = await db.execute("SELECT * FROM blast_inventory ORDER BY created_at ASC");
       const matchingLots = allMatching.rows.filter(
         (r) =>
           normProductName(r.product) === normProductName(item.product) &&
-          normDate(r.production_date) === normDate(item.productionDate)
+          normDate(r.production_date) === normDate(item.productionDate) &&
+          (r.unit || "kg").toLowerCase() === parsedUnit
       );
 
       let remainingToDeduct = parsedAmount;
@@ -399,11 +409,20 @@ app.post("/api/queues", async (req, res) => {
         if (avail > 0) {
           const take = Math.min(avail, remainingToDeduct);
           const newVol = Math.round((avail - take + Number.EPSILON) * 100) / 100;
+          let newEquiv = parseFloat(invRow.equivalent_kilos || 0);
+          if (isPacks && avail > 0) {
+            const equivPerPack = (parseFloat(invRow.equivalent_kilos || 0)) / avail;
+            const equivDeduct = Math.round((take * equivPerPack + Number.EPSILON) * 100) / 100;
+            newEquiv = Math.round((Math.max(0, parseFloat(invRow.equivalent_kilos || 0) - equivDeduct) + Number.EPSILON) * 100) / 100;
+          } else if (!isPacks) {
+            newEquiv = newVol;
+          }
+
           remainingToDeduct = Math.round((remainingToDeduct - take + Number.EPSILON) * 100) / 100;
 
           await db.execute({
-            sql: "UPDATE blast_inventory SET volume = ? WHERE id = ?",
-            args: [newVol, invRow.id],
+            sql: "UPDATE blast_inventory SET volume = ?, equivalent_kilos = ? WHERE id = ?",
+            args: [newVol, newEquiv, invRow.id],
           });
         }
       }
@@ -415,15 +434,24 @@ app.post("/api/queues", async (req, res) => {
           const targetLot = matchingLots[matchingLots.length - 1];
           const currVol = parseFloat(targetLot.volume || 0);
           const newVol = Math.round((currVol - remainingToDeduct + Number.EPSILON) * 100) / 100;
+          let newEquiv = parseFloat(targetLot.equivalent_kilos || 0);
+          if (isPacks) {
+            const equivDeduct = Math.round(((remainingToDeduct / parsedAmount) * numEquiv + Number.EPSILON) * 100) / 100;
+            newEquiv = Math.round((newEquiv - equivDeduct + Number.EPSILON) * 100) / 100;
+          } else {
+            newEquiv = newVol;
+          }
+
           await db.execute({
-            sql: "UPDATE blast_inventory SET volume = ? WHERE id = ?",
-            args: [newVol, targetLot.id],
+            sql: "UPDATE blast_inventory SET volume = ?, equivalent_kilos = ? WHERE id = ?",
+            args: [newVol, newEquiv, targetLot.id],
           });
         } else {
           // No lot existed at all for this product & production date: insert standalone negative lot
+          const negEquiv = isPacks ? -numEquiv : -remainingToDeduct;
           await db.execute({
-            sql: `INSERT INTO blast_inventory (date, production_date, product, volume, unit, category, notes, created_at)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            sql: `INSERT INTO blast_inventory (date, production_date, product, volume, unit, category, notes, created_at, equivalent_kilos)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             args: [
               targetDate,
               normDate(item.productionDate) || targetDate,
@@ -433,6 +461,7 @@ app.post("/api/queues", async (req, res) => {
               "For Layer",
               "Standalone For Layer (Negative Stock / Pending Stock Receipt)",
               now.toISOString(),
+              negEquiv,
             ],
           });
         }
@@ -441,19 +470,19 @@ app.post("/api/queues", async (req, res) => {
 
       // Remaining stock after deduction
       const afterSum = await db.execute({
-        sql: "SELECT SUM(volume) as total FROM blast_inventory WHERE LOWER(TRIM(product)) = LOWER(TRIM(?))",
-        args: [item.product.trim()],
+        sql: "SELECT SUM(volume) as total FROM blast_inventory WHERE LOWER(TRIM(product)) = LOWER(TRIM(?)) AND LOWER(TRIM(unit)) = LOWER(TRIM(?))",
+        args: [item.product.trim(), parsedUnit],
       });
       const remainingTotal = Math.round(((afterSum.rows[0]?.total || 0) + Number.EPSILON) * 100) / 100;
 
       // Log movement history
       const historyDetails = isForLayer
-        ? "Deducted when added to Product Queuing for Blast (Standalone For Layer)"
-        : "Deducted when added to Product Queuing for Blast";
+        ? `Deducted when added to Product Queuing for Blast (Standalone For Layer)${isPacks ? ` · Equiv: ${numEquiv.toLocaleString()} kg` : ""}`
+        : `Deducted when added to Product Queuing for Blast${isPacks ? ` · Equiv: ${numEquiv.toLocaleString()} kg` : ""}`;
 
       await db.execute({
-        sql: `INSERT INTO blast_inventory_history (timestamp, type, product, production_date, volume, unit, remaining, shift, queue, details)
-              VALUES (?, 'DEDUCTION', ?, ?, ?, ?, ?, ?, ?, ?)`,
+        sql: `INSERT INTO blast_inventory_history (timestamp, type, product, production_date, volume, unit, remaining, shift, queue, details, equivalent_kilos)
+              VALUES (?, 'DEDUCTION', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         args: [
           now.toISOString(),
           item.product,
@@ -464,6 +493,7 @@ app.post("/api/queues", async (req, res) => {
           queueShift || "",
           newQueueNum,
           historyDetails,
+          numEquiv,
         ],
       });
     }
@@ -605,6 +635,10 @@ app.patch("/api/queues/:id/status", async (req, res) => {
             const pName = (p.product || "").trim();
             const pDate = p.productionDate || current.production_date || "";
 
+            const pUnit = (p.unit || "kg").toLowerCase();
+            const isPacks = pUnit === "packs";
+            const pEquiv = parseFloat(p.equivalentKilos) || totalAmount;
+
             const allInv = await db.execute({
               sql: "SELECT * FROM blast_inventory ORDER BY id DESC",
             });
@@ -612,34 +646,43 @@ app.patch("/api/queues/:id/status", async (req, res) => {
             const matchingRow = allInv.rows.find(
               (r) =>
                 normProductName(r.product) === normProductName(pName) &&
-                normDate(r.production_date) === normDate(pDate)
+                normDate(r.production_date) === normDate(pDate) &&
+                (r.unit || "kg").toLowerCase() === pUnit
             );
 
             if (matchingRow) {
               const updatedVol = Math.round((parseFloat(matchingRow.volume) + returnVol + Number.EPSILON) * 100) / 100;
+              const returnEquiv = isPacks && totalAmount > 0
+                ? Math.round(((returnVol / totalAmount) * pEquiv + Number.EPSILON) * 100) / 100
+                : updatedVol;
+              const updatedEquiv = Math.round((parseFloat(matchingRow.equivalent_kilos || 0) + returnEquiv + Number.EPSILON) * 100) / 100;
+
               await db.execute({
-                sql: "UPDATE blast_inventory SET volume = ? WHERE id = ?",
-                args: [updatedVol, matchingRow.id],
+                sql: "UPDATE blast_inventory SET volume = ?, equivalent_kilos = ? WHERE id = ?",
+                args: [updatedVol, updatedEquiv, matchingRow.id],
               });
             } else {
               const anyMatch = allInv.rows.find(
                 (r) => normProductName(r.product) === normProductName(pName)
               );
-              const unit = p.unit || anyMatch?.unit || "kg";
               const category = anyMatch?.category || "Returned Stock";
+              const returnEquiv = isPacks && totalAmount > 0
+                ? Math.round(((returnVol / totalAmount) * pEquiv + Number.EPSILON) * 100) / 100
+                : returnVol;
 
               await db.execute({
-                sql: `INSERT INTO blast_inventory (date, production_date, product, volume, unit, category, notes, created_at)
-                      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                sql: `INSERT INTO blast_inventory (date, production_date, product, volume, unit, category, notes, created_at, equivalent_kilos)
+                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 args: [
                   todayString(),
                   normDate(pDate) || todayString(),
                   pName,
                   returnVol,
-                  unit,
+                  pUnit,
                   category,
                   `Restored from cancelled queue ${current.queue}`,
                   now.toISOString(),
+                  returnEquiv,
                 ],
               });
             }
@@ -798,14 +841,27 @@ app.post("/api/queues/:id/allocate", async (req, res) => {
 
     const childProducts = validatedPicks.map(({ index, volume }) => {
       const src = parentProducts[index];
+      const isPacks = (src.unit || "").toLowerCase() === "packs";
+      const childAmount = parseFloat(volume);
+      let childEquivKilos = childAmount;
+      if (isPacks) {
+        const srcTotalAmount = parseFloat(src.amount) || childAmount;
+        const srcTotalEquiv = parseFloat(src.equivalentKilos) || childAmount;
+        childEquivKilos = Math.round((childAmount / srcTotalAmount) * srcTotalEquiv * 100) / 100;
+      }
+      const childVolDisplay = isPacks
+        ? `${childAmount} packs (Equiv: ${childEquivKilos} kg)`
+        : `${childAmount} kg`;
+
       return {
         product: src.product,
-        volume: `${volume} ${src.unit || "kg"}`,
+        volume: childVolDisplay,
         productTemperature: src.productTemperature,
         productionDate: src.productionDate,
-        amount: parseFloat(volume),
+        amount: childAmount,
         unit: src.unit || "kg",
-        allocated: parseFloat(volume),
+        equivalentKilos: childEquivKilos,
+        allocated: childAmount,
       };
     });
 
