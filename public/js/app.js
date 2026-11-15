@@ -30,7 +30,10 @@ function escapeHTML(v) {
 function formatUnit(u) {
   if (!u) return "";
   const s = String(u).trim();
-  return s.toLowerCase() === "cases" ? "crates" : s;
+  const lower = s.toLowerCase();
+  if (lower === "cases") return "crates";
+  if (lower === "kilos") return "kg";
+  return s;
 }
 
 function showToast(message, type = "success") {
@@ -303,13 +306,19 @@ function renderBlastInventory() {
         const negBadge = isNeg
           ? `<span class="badge" style="background:#fee2e2;color:#b91c1c;font-size:10.5px;padding:2px 7px;margin-left:6px;border:1px solid #fca5a5;">NEGATIVE STOCK</span>`
           : "";
+        const equivKilos = parseFloat(r.equivalent_kilos || 0);
+        const isPacks = String(r.unit || "").toLowerCase() === "packs";
+        const equivHtml = (isPacks && equivKilos !== 0)
+          ? `<br><small style="color:#0284c7;font-weight:700;">Equiv: ${Number(equivKilos).toLocaleString(undefined, { maximumFractionDigits: 2 })} kg</small>`
+          : "";
+
         return `
     <tr>
       <td style="font-weight:700;">${escapeHTML(r.production_date || r.date || "—")}</td>
       <td style="white-space:nowrap;color:#64748b;">${escapeHTML(new Date(r.created_at).toLocaleString())}</td>
       <td style="font-weight:800;color:#0f172a;">${escapeHTML(r.product)}</td>
       <td style="font-weight:800;color:${volColor};">
-        ${volFormatted} ${escapeHTML(formatUnit(r.unit))}${negBadge}
+        ${volFormatted} ${escapeHTML(formatUnit(r.unit))}${negBadge}${equivHtml}
       </td>
       <td><span class="badge" style="background:#f1f5f9;color:#334155;">${escapeHTML(r.category || "Uncategorized")}</span></td>
       <td>
@@ -345,9 +354,20 @@ function renderBlastInventory() {
             const textCol = isNeg ? "#dc2626" : "#15803d";
             const subCol = isNeg ? "#b91c1c" : "#16a34a";
             const label = isNeg ? "Total Deficit (Negative)" : "Total Available";
+
+            let equivSub = "";
+            if (unit.toLowerCase() === "packs") {
+              const totalEquiv = inventoryList
+                .filter((r) => (r.unit || "").toLowerCase() === "packs")
+                .reduce((sum, r) => sum + parseFloat(r.equivalent_kilos || 0), 0);
+              if (totalEquiv > 0) {
+                equivSub = `<br><small style="color:#0284c7;font-weight:700;">Equiv: ${totalEquiv.toLocaleString(undefined, { maximumFractionDigits: 2 })} kg</small>`;
+              }
+            }
+
             return `
         <div style="background:${bg};padding:12px 18px;border-radius:10px;border:1px solid ${border};">
-          <strong style="font-size:18px;color:${textCol};">${total.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${escapeHTML(formatUnit(unit))}</strong><br>
+          <strong style="font-size:18px;color:${textCol};">${total.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${escapeHTML(formatUnit(unit))}</strong>${equivSub}<br>
           <span style="font-size:12px;color:${subCol};font-weight:700;">${label}</span>
         </div>
       `;
@@ -374,9 +394,10 @@ function renderCategoryInventoryBoard() {
 
     if (!categoryGroups[cat]) categoryGroups[cat] = {};
     if (!categoryGroups[cat][key]) {
-      categoryGroups[cat][key] = { product: prod, unit, volume: 0, productionDate: pDate };
+      categoryGroups[cat][key] = { product: prod, unit, volume: 0, productionDate: pDate, equivKilos: 0 };
     }
     categoryGroups[cat][key].volume += parseFloat(r.volume || 0);
+    categoryGroups[cat][key].equivKilos += parseFloat(r.equivalent_kilos || 0);
   });
 
   const catNames = Object.keys(categoryGroups);
@@ -409,10 +430,14 @@ function renderCategoryInventoryBoard() {
               (it) => {
                 const isNeg = it.volume < 0;
                 const itColor = isNeg ? "#dc2626" : "#15803d";
+                const isPacks = String(it.unit || "").toLowerCase() === "packs";
+                const equivTag = (isPacks && it.equivKilos > 0)
+                  ? ` <small style="color:#0284c7;font-weight:700;">(Equiv: ${it.equivKilos.toLocaleString(undefined, { maximumFractionDigits: 2 })} kg)</small>`
+                  : "";
                 return `
-            <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #fff7ed;">
+            <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #fff7ed;align-items:center;">
               <span style="font-weight:700;">${escapeHTML(it.product)} <small style="color:#64748b;">(${escapeHTML(it.productionDate)})</small></span>
-              <span style="font-weight:800;color:${itColor};">${it.volume.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${escapeHTML(formatUnit(it.unit))}${isNeg ? ' ⚠' : ''}</span>
+              <span style="font-weight:800;color:${itColor};">${it.volume.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${escapeHTML(it.unit)}${equivTag}${isNeg ? ' ⚠' : ''}</span>
             </div>
           `;
               }
@@ -1752,13 +1777,30 @@ document.addEventListener("DOMContentLoaded", () => {
         submitBtn.innerHTML = "⏳ SAVING TO CLOUD...";
       }
 
+      const rawUnit = document.getElementById("blastLogUnit").value;
+      const unit = formatUnit(rawUnit);
+      const isPacks = unit.toLowerCase() === "packs";
+      const equivInput = document.getElementById("blastLogEquivKilos");
+      const equivalentKilos = isPacks ? parseFloat(equivInput?.value) || 0 : 0;
+
+      if (isPacks && (!equivalentKilos || equivalentKilos <= 0)) {
+        showToast("Pakilagay ang katumbas na kilos (Equivalent Kilos) para sa packs.", "warning");
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = origBtnText;
+        }
+        isSubmittingInv = false;
+        return;
+      }
+
       const payload = {
         date: document.getElementById("blastLogDate").value,
         productionDate: document.getElementById("blastLogProductionDate").value.trim(),
         product: document.getElementById("blastLogProduct").value.trim().toUpperCase(),
         volume: document.getElementById("blastLogVolume").value,
-        unit: formatUnit(document.getElementById("blastLogUnit").value),
+        unit,
         category: document.getElementById("blastLogCategory").value,
+        equivalentKilos,
       };
 
       try {
@@ -1769,9 +1811,11 @@ document.addEventListener("DOMContentLoaded", () => {
         });
 
         if (res.ok) {
-          showToast(`Added ${payload.volume} ${payload.unit} of ${payload.product} to inventory.`);
+          const detailMsg = isPacks && equivalentKilos > 0 ? ` (${equivalentKilos.toLocaleString()} kg equiv)` : "";
+          showToast(`Added ${payload.volume} ${payload.unit}${detailMsg} of ${payload.product} to inventory.`);
           invForm.reset();
           document.getElementById("blastLogDate").value = todayDateStr();
+          updateBlastLogUnitFields();
           await fetchInventory();
           await fetchHistory();
         } else {
@@ -1951,6 +1995,39 @@ document.addEventListener("DOMContentLoaded", () => {
     };
     forLayerSelect.addEventListener("change", handleForLayerToggle);
     handleForLayerToggle();
+  }
+
+  // Unit of Measure toggle listener (kilos vs packs with equivalent kilos)
+  const blastLogUnitEl = document.getElementById("blastLogUnit");
+  function updateBlastLogUnitFields() {
+    const volLabel = document.getElementById("blastLogVolumeLabel");
+    const volInput = document.getElementById("blastLogVolume");
+    const equivGroup = document.getElementById("blastLogEquivKilosGroup");
+    const equivInput = document.getElementById("blastLogEquivKilos");
+    if (!blastLogUnitEl || !volLabel || !volInput) return;
+
+    const isPacks = blastLogUnitEl.value === "packs";
+    if (isPacks) {
+      volLabel.textContent = "Packs Count *";
+      volInput.placeholder = "e.g., 500";
+      volInput.step = "any";
+      if (equivGroup) equivGroup.style.display = "flex";
+      if (equivInput) equivInput.required = true;
+    } else {
+      volLabel.textContent = "Volume (kg) *";
+      volInput.placeholder = "e.g., 5000";
+      volInput.step = "0.01";
+      if (equivGroup) equivGroup.style.display = "none";
+      if (equivInput) {
+        equivInput.required = false;
+        equivInput.value = "";
+      }
+    }
+  }
+
+  if (blastLogUnitEl) {
+    blastLogUnitEl.addEventListener("change", updateBlastLogUnitFields);
+    updateBlastLogUnitFields();
   }
 
   // Load initial data

@@ -88,17 +88,22 @@
             <input id="blastLogProduct" type="text" placeholder="e.g., HJAC, CCM, MDS" required>
           </div>
           <div class="form-group">
-            <label for="blastLogVolume">Volume *</label>
+            <label for="blastLogUnit">Unit of Measure *</label>
+            <select id="blastLogUnit" required>
+              <option value="kilos">kilos (kg)</option>
+              <option value="packs">packs</option>
+            </select>
+          </div>
+          <div class="form-group" id="blastLogVolumeGroup">
+            <label id="blastLogVolumeLabel" for="blastLogVolume">Volume (kg) *</label>
             <input id="blastLogVolume" type="number" min="0.01" step="0.01" placeholder="e.g., 5000" required>
           </div>
-          <div class="form-group">
-            <label for="blastLogUnit">Unit *</label>
-            <select id="blastLogUnit" required>
-              <option value="kg">kg</option>
-              <option value="MT">MT</option>
-              <option value="boxes">boxes</option>
-              <option value="crates">crates</option>
-            </select>
+          <div class="form-group" id="blastLogEquivKilosGroup" style="display:none;">
+            <label for="blastLogEquivKilos">Equivalent Kilos (kg) *</label>
+            <input id="blastLogEquivKilos" type="number" min="0.01" step="0.01" placeholder="e.g., 1000">
+            <small style="color:#0284c7;font-weight:700;margin-top:3px;">
+              ℹ Manu-manong i-type ang katumbas na kabuuang kilo ng mga packs.
+            </small>
           </div>
           <div class="form-group">
             <label for="blastLogCategory">Product Category *</label>

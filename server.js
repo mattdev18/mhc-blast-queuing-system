@@ -135,15 +135,22 @@ const recentAllocSubmissions = new Map();
 // 3. Inventory - Add Stock
 app.post("/api/inventory", async (req, res) => {
   try {
-    const { date, productionDate, product, volume, unit, category, notes } = req.body;
+    const { date, productionDate, product, volume, unit, category, notes, equivalentKilos } = req.body;
     if (!product || !volume || !productionDate) {
       return res.status(400).json({ error: "Product, volume, and production date are required." });
     }
 
     const pName = product.trim().toUpperCase();
     const pDate = normDate(productionDate);
-    const pUnit = (unit || "kg").trim().toLowerCase() === "cases" ? "crates" : (unit || "kg").trim();
+    let pUnit = (unit || "kg").trim().toLowerCase();
+    if (pUnit === "cases") pUnit = "crates";
+    if (pUnit === "kilos") pUnit = "kg";
+
     const numVolume = parseFloat(volume);
+    const numEquivKilos = pUnit === "packs" 
+      ? Math.round((parseFloat(equivalentKilos) || 0) * 100) / 100
+      : numVolume;
+
     const createdAt = new Date().toISOString();
     const nowMs = Date.now();
 
@@ -171,16 +178,17 @@ app.post("/api/inventory", async (req, res) => {
     if (existingMatch) {
       // Merge into existing lot: add to available volume so rows/kilos do not duplicate
       const newLotVol = Math.round((parseFloat(existingMatch.volume) + numVolume + Number.EPSILON) * 100) / 100;
+      const newEquivKilos = Math.round(((parseFloat(existingMatch.equivalent_kilos || 0) + numEquivKilos) + Number.EPSILON) * 100) / 100;
       await db.execute({
-        sql: "UPDATE blast_inventory SET volume = ?, date = ?, category = COALESCE(?, category), notes = COALESCE(?, notes) WHERE id = ?",
-        args: [newLotVol, date || todayString(), category || null, notes || null, existingMatch.id],
+        sql: "UPDATE blast_inventory SET volume = ?, equivalent_kilos = ?, date = ?, category = COALESCE(?, category), notes = COALESCE(?, notes) WHERE id = ?",
+        args: [newLotVol, newEquivKilos, date || todayString(), category || null, notes || null, existingMatch.id],
       });
       targetId = existingMatch.id;
     } else {
       // Insert new inventory lot
       const insertResult = await db.execute({
-        sql: `INSERT INTO blast_inventory (date, production_date, product, volume, unit, category, notes, created_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        sql: `INSERT INTO blast_inventory (date, production_date, product, volume, unit, category, notes, created_at, equivalent_kilos)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         args: [
           date || todayString(),
           pDate,
@@ -190,6 +198,7 @@ app.post("/api/inventory", async (req, res) => {
           category || "Uncategorized",
           notes || "",
           createdAt,
+          numEquivKilos,
         ],
       });
       targetId = Number(insertResult.lastInsertRowid);
@@ -203,9 +212,13 @@ app.post("/api/inventory", async (req, res) => {
     const totalRemaining = sumResult.rows[0]?.total || numVolume;
 
     // Log history
+    const historyDetails = pUnit === "packs" && numEquivKilos > 0
+      ? `Category: ${category || "Uncategorized"} · Equiv: ${numEquivKilos.toLocaleString()} kg`
+      : `Category: ${category || "Uncategorized"}`;
+
     await db.execute({
-      sql: `INSERT INTO blast_inventory_history (timestamp, type, product, production_date, volume, unit, remaining, shift, queue, details)
-            VALUES (?, 'REGISTER', ?, ?, ?, ?, ?, '', '', ?)`,
+      sql: `INSERT INTO blast_inventory_history (timestamp, type, product, production_date, volume, unit, remaining, shift, queue, details, equivalent_kilos)
+            VALUES (?, 'REGISTER', ?, ?, ?, ?, ?, '', '', ?, ?)`,
       args: [
         createdAt,
         pName,
@@ -213,7 +226,8 @@ app.post("/api/inventory", async (req, res) => {
         numVolume,
         pUnit,
         totalRemaining,
-        `Category: ${category || "Uncategorized"}`,
+        historyDetails,
+        numEquivKilos,
       ],
     });
 

@@ -66,9 +66,15 @@ export async function initDatabase() {
         unit TEXT NOT NULL DEFAULT 'kg',
         category TEXT NOT NULL DEFAULT 'Uncategorized',
         notes TEXT,
-        created_at TEXT NOT NULL
+        created_at TEXT NOT NULL,
+        equivalent_kilos REAL DEFAULT 0
       );
     `);
+
+    // Safely add equivalent_kilos column if it doesn't exist yet on existing databases
+    try {
+      await db.execute("ALTER TABLE blast_inventory ADD COLUMN equivalent_kilos REAL DEFAULT 0");
+    } catch (e) {}
 
     // 2. Inventory Movement History
     await db.execute(`
@@ -83,9 +89,14 @@ export async function initDatabase() {
         remaining REAL NOT NULL DEFAULT 0,
         shift TEXT,
         queue TEXT,
-        details TEXT
+        details TEXT,
+        equivalent_kilos REAL DEFAULT 0
       );
     `);
+
+    try {
+      await db.execute("ALTER TABLE blast_inventory_history ADD COLUMN equivalent_kilos REAL DEFAULT 0");
+    } catch (e) {}
 
     // 3. Queue Records (Batches, Queuing, Blasts, and Activities)
     await db.execute(`
