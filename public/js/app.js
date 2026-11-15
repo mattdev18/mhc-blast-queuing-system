@@ -607,7 +607,7 @@ function renderQueueInventoryReference() {
   }
 
   if (list.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:18px;color:#64748b;">Walang tugmang produkto sa inventory.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:18px;color:#64748b;">No matching products in inventory.</td></tr>`;
     if (empty) empty.style.display = "none";
     return;
   }
@@ -641,7 +641,7 @@ function renderQueueInventoryReference() {
           <td><span class="badge" style="background:#f1f5f9;color:#334155;">${escapeHTML(r.category || "Uncategorized")}</span></td>
           <td style="text-align:center;">
             <button type="button" class="btn-primary" style="padding:4px 10px;font-size:11.5px;" onclick="fillProductToQueue('${prodParam}', '${dateParam}')">
-              ➕ Gamitin sa Queue
+              ➕ Use in Queue
             </button>
           </td>
         </tr>
@@ -706,7 +706,7 @@ function fillProductToQueue(productName, productionDate) {
     if (dInput && productionDate) dInput.value = productionDate;
     checkProductProductionDate(targetEntry);
     targetEntry.scrollIntoView({ behavior: "smooth", block: "center" });
-    showToast(`Na-fill sa form: ${productName} (${productionDate || "Walang petsa"})`);
+    showToast(`Filled in form: ${productName} (${productionDate || "No date"})`);
   }
 }
 
@@ -743,7 +743,7 @@ function checkProductProductionDate(row) {
 
   if (matching.length === 0 || available <= 0) {
     if (isForLayer) {
-      msg.innerHTML = `⚡ <strong>Standalone For Layer:</strong> Walang stock sa inventory. Magiging <u>negative stock</u> ito pagka-queue.`;
+      msg.innerHTML = `⚡ <strong>Standalone For Layer:</strong> No stock in inventory. Will reflect as <u>negative stock</u> once queued.`;
       msg.style.color = "#c2410c";
       dateInput.setCustomValidity("");
       return true;
@@ -963,7 +963,7 @@ function renderAllocPanel(truck) {
               <div style="display:flex;gap:4px;align-items:center;">
                 <input type="number" id="alloc_${truck.id}_${origIdx}" min="0.01" max="${remaining}" step="any"
                   value="${displayVal}"
-                  oninput="if(parseFloat(this.value) > ${remaining}) { this.value = ${remaining}; showToast('Hindi maaaring lumagpas sa natitirang ${remaining} ${u}.', 'warning'); } updateAllocVol('${truck.id}', ${origIdx}, this.value);"
+                  oninput="if(parseFloat(this.value) > ${remaining}) { this.value = ${remaining}; showToast('Cannot exceed remaining ${remaining} ${u}.', 'warning'); } updateAllocVol('${truck.id}', ${origIdx}, this.value);"
                   style="width:110px;padding:4px 8px;font-size:12px;">
                 <span style="font-size:11px;font-weight:700;">${escapeHTML(u)}</span>
               </div>
@@ -973,7 +973,7 @@ function renderAllocPanel(truck) {
         .join("")}
       <div style="margin-top:6px;margin-bottom:6px;">
         <label style="font-size:10.5px;font-weight:700;color:#475569;text-transform:uppercase;margin-bottom:2px;display:block;">
-          Tally Sheet # o TRF #
+          Tally Sheet # / TRF #
         </label>
         <input type="text" id="allocRef_${truck.id}"
           value="${escapeHTML(draft.referenceNumber || '')}"
@@ -1029,9 +1029,9 @@ async function allocateQueueBatch(id) {
       }
 
       if (vol > 0) {
-        // STRICT CHECK: Kapag lumagpas ang kilos sa natitira sa inventory, hindi na ito magtutuloy
+        // STRICT CHECK: Volume cannot exceed remaining stock in inventory
         if (vol > remaining + 0.001) {
-          showToast(`Hindi magtutuloy ang pag-assign: Lumagpas ang kilos para sa ${prods[i].product}. Hinihingi: ${vol} ${formatUnit(prods[i].unit)}, pero ${remaining} ${formatUnit(prods[i].unit)} na lang ang natitira sa inventory.`, "error");
+          showToast(`Assignment cannot proceed: Volume exceeds remaining stock for ${prods[i].product}. Requested: ${vol} ${formatUnit(prods[i].unit)}, but only ${remaining} ${formatUnit(prods[i].unit)} remains in inventory.`, "error");
           return;
         }
         picks.push({ index: i, volume: vol });
@@ -1039,7 +1039,7 @@ async function allocateQueueBatch(id) {
     }
 
     if (picks.length === 0) {
-      showToast("Mangyaring maglagay ng kilos para sa kahit isang produkto.", "warning");
+      showToast("Please enter volume for at least one product.", "warning");
       return;
     }
 
@@ -1059,10 +1059,10 @@ async function allocateQueueBatch(id) {
       await fetchQueues();
     } else {
       const err = await res.json();
-      showToast(err.error || "Hindi nagtuloy ang pag-assign", "error");
+      showToast(err.error || "Batch assignment failed", "error");
     }
   } catch (e) {
-    showToast("Network error sa pag-assign ng queue", "error");
+    showToast("Network error during queue assignment", "error");
   } finally {
     allocatingQueueIds.delete(id);
     if (assignBtn) {
@@ -1970,7 +1970,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const equivalentKilos = isPacks ? parseFloat(equivInput?.value) || 0 : 0;
 
       if (isPacks && (!equivalentKilos || equivalentKilos <= 0)) {
-        showToast("Pakilagay ang katumbas na kilos (Equivalent Kilos) para sa packs.", "warning");
+        showToast("Please enter the Equivalent Kilos for packs.", "warning");
         if (submitBtn) {
           submitBtn.disabled = false;
           submitBtn.innerHTML = origBtnText;

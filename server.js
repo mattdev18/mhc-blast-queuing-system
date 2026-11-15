@@ -724,7 +724,7 @@ app.post("/api/queues/:id/allocate", async (req, res) => {
     const allocLockKey = `alloc_${id}`;
     const nowMs = Date.now();
     if (recentAllocSubmissions.has(allocLockKey) && nowMs - recentAllocSubmissions.get(allocLockKey) < 2500) {
-      return res.status(429).json({ error: "Kasalukuyang pinoproseso ang pag-assign sa batch na ito. Maghintay sandali." });
+      return res.status(429).json({ error: "Currently processing assignment for this batch. Please wait a moment." });
     }
     recentAllocSubmissions.set(allocLockKey, nowMs);
     for (const [k, t] of recentAllocSubmissions.entries()) {
@@ -742,7 +742,7 @@ app.post("/api/queues/:id/allocate", async (req, res) => {
 
     const parent = parentRes.rows[0];
     if (parent.status === "Allocated" || parent.status === "Cancelled") {
-      return res.status(400).json({ error: `Hindi na maaaring mag-assign: Ang queue ${parent.queue} ay ${parent.status === "Allocated" ? "fully allocated na" : "cancelled na"}.` });
+      return res.status(400).json({ error: `Cannot assign: Queue ${parent.queue} is already ${parent.status === "Allocated" ? "fully allocated" : "cancelled"}.` });
     }
 
     const parentProducts = parent.products_json ? JSON.parse(parent.products_json) : [];
@@ -765,7 +765,7 @@ app.post("/api/queues/:id/allocate", async (req, res) => {
       if (toAlloc > 0) {
         if (toAlloc > remaining + 0.001) {
           return res.status(400).json({
-            error: `Hindi magtutuloy ang pag-assign: Lumagpas ang kilos para sa ${p.product}. Hinihingi: ${toAlloc} ${p.unit || "kg"}, pero ${remaining} ${p.unit || "kg"} na lang ang natitira sa inventory lot na ito.`
+            error: `Assignment cannot proceed: Volume exceeds remaining stock for ${p.product}. Requested: ${toAlloc} ${p.unit || "kg"}, but only ${remaining} ${p.unit || "kg"} remains in this inventory lot.`
           });
         }
         validatedPicks.push({ index: idx, volume: toAlloc });
@@ -774,7 +774,7 @@ app.post("/api/queues/:id/allocate", async (req, res) => {
     }
 
     if (validatedPicks.length === 0 || totalAssignedInBatch <= 0) {
-      return res.status(400).json({ error: "Hindi magtutuloy: Walang wastong kilos na inassign para sa kahit isang produkto." });
+      return res.status(400).json({ error: "Cannot proceed: No valid volume assigned for any product." });
     }
 
     const splitCount = (parent.split_count || 0) + 1;
