@@ -2323,8 +2323,9 @@ document.addEventListener("DOMContentLoaded", () => {
   // Load initial data
   refreshAllData();
 
-  // Background Live Sync Poller (Every 3 seconds)
+  // Background Live Sync Poller (Every 30 seconds when visible to conserve Turso database quota)
   pollTimer = setInterval(async () => {
+    if (document.hidden) return;
     await fetchQueues();
-  }, 3000);
+  }, 30000);
 });
